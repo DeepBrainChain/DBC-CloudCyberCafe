@@ -1,0 +1,9 @@
+*__pycache__*
+netboot/
+winpe/
+preset/build/
+preset/build32/
+preset/build64/
+test/thrift/build/
+test/thrift/build32/
+test/thrift/build64/

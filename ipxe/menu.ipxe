@@ -1,0 +1,124 @@
+#!ipxe
+:start
+menu iPXE boot menu build 20220717
+item --gap --                        ------------------------- Operating systems ------------------------------
+item --key w windows                 Boot Windows from iSCSI
+item --key w ubuntu                  Boot Ubuntu from iSCSI
+item --gap --                        ------------------------- Tools and utilities ----------------------------
+item --key d winpe32                 Boot basic WindowsPE 32 bit
+item --key d winpe64                 Boot basic WindowsPE 64 bit
+item --key d install_ubuntu_iscsi    Installing Ubuntu to iSCSI target
+item --key d install_ubuntu_local    Installing Ubuntu to local disk
+item --gap --                        ------------------------- Advanced options -------------------------------
+item --key c config                  Configure settings
+item shell                           Drop to iPXE shell
+item reboot                          Reboot computer
+item
+item --key x exit                    Exit iPXE and continue BIOS boot
+choose --timeout ${menu-timeout} --default ${menu-default} selected || goto cancel
+set menu-timeout 0
+goto ${selected}
+
+:cancel
+echo You cancelled the menu, dropping you to a shell
+
+:shell
+echo Type 'exit' to get the back to the menu
+shell
+goto start
+
+:failed
+echo Failed to start, will return to main menu within 5 seconds
+sleep 5
+goto start
+
+:reboot
+reboot
+
+:exit
+exit
+
+:config
+config
+goto start
+
+:windows
+cpuid --ext 29 && set arch amd64
+ifopen net0
+dhcp
+set netX/gateway 0.0.0.0
+set keep-san 1
+echo Booting from SAN device
+sanboot iscsi:${iscsi-server}::::${iscsi-iqn} || goto failed
+goto start
+
+:ubuntu
+cpuid --ext 29 && set arch x86_64
+ifopen net0
+dhcp
+set netX/gateway 0.0.0.0
+set keep-san 1
+echo Booting from SAN device
+sanboot iscsi:${iscsi-server}::::${iscsi-iqn} || goto failed
+goto start
+
+:winpe32
+cpuid --ext 29 && set arch x86
+goto winpe
+
+:winpe64
+cpuid --ext 29 && set arch amd64
+goto winpe
+
+:winpe
+ifopen net0
+dhcp
+set netX/gateway 0.0.0.0
+set keep-san 1
+echo Attach SAN device...
+sanhook iscsi:${iscsi-server}::::${iscsi-iqn} || goto failed
+echo Load Windows PE file...
+kernel wimboot
+initrd ${base-url}/winpe/${arch}/media/Boot/BCD                     BCD
+initrd ${base-url}/winpe/${arch}/media/Boot/boot.sdi                boot.sdi
+initrd ${base-url}/winpe/${arch}/media/sources/boot.wim             boot.wim
+echo Starting the system....
+boot || goto failed
+goto start
+
+:install_ubuntu_iscsi
+ifopen net0
+cpuid --ext 29 && set arch x86_64
+set keep-san 1
+echo Attach SAN device...
+sanhook iscsi:${iscsi-server}::::${iscsi-iqn} || goto failed
+echo Load Ubuntu ISO file...
+# kernel ${base-url}/fedora35/images/pxeboot/vmlinuz initrd=initrd.img inst.repo=${base-url}/fedora35
+# initrd ${base-url}/fedora35/images/pxeboot/initrd.img
+kernel ${base-url}/netboot/ubuntu-installer/amd64/linux
+initrd ${base-url}/netboot/ubuntu-installer/amd64/initrd.gz
+imgargs linux auto=true fb=false url=${base-url}/ubuntu/preseed.cfg
+  # DEBCONF_DEBUG=5 \
+  # interface=auto netcfg/dhcp_timeout=60 netcfg/get_hostname=jerry \
+  # partman-iscsi/initiatorname=${initiator-iqn} \
+  # partman-iscsi/login/address=${iscsi-server} \
+  # partman-iscsi/login/targets=${iscsi-iqn}
+# sanboot ${base-url}/fedora.iso || goto failed
+boot || goto failed
+goto start
+
+:install_ubuntu_local
+ifopen net0
+cpuid --ext 29 && set arch x86_64
+echo network boot to install Ubuntu to local disk
+# kernel ${base-url}/netboot/ubuntu-installer/amd64/linux
+# initrd ${base-url}/netboot/ubuntu-installer/amd64/initrd.gz
+# imgargs linux auto=true fb=false ip=dhcp
+# not success bottom
+imgfree
+kernel ${base-url}/ubuntu-18.04.6/casper/vmlinuz
+initrd ${base-url}/ubuntu-18.04.6/casper/initrd
+imgargs vmlinuz initrd=initrd root=/dev/ram0 url=${base-url}/ubuntu-18.04.6-live-server-amd64.iso splash
+# imgargs vmlinuz initrd=initrd ip=dhcp inst.repo=${base-url}/ubuntu-18.04.6
+boot || goto failed
+goto start
