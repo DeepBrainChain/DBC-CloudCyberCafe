@@ -16,8 +16,6 @@
  * Did you also notice that Thrift supports C style comments?
  */
 
-# include "shared.thrift"
-
 namespace cpp occ
 
 struct ResultStruct {
@@ -30,13 +28,16 @@ enum MessageType {
   GET_HOST_INFO = 2,
   SET_HOST_INFO = 3,
   GET_USER_LIST = 4,
-  SET_USER_PASSWORD = 5
+  SET_USER_PASSWORD = 5,
+  GET_BOOT_MENU = 32,
+  SET_BOOT_MENU = 33
 }
 
 struct Message {
   1: required i32 version,
   2: required i32 type,
-  3: required string body
+  3: required string body,
+  4: optional string host
 }
 
 struct HostInfo {
@@ -51,6 +52,15 @@ struct UserList {
 struct UserPassword {
   1: required string userName,
   2: required string password
+}
+
+struct BootMenuList {
+  1: required list<string> menus
+}
+
+struct BootMenu {
+  1: required string menu,
+  2: required bool superTube
 }
 
 /**

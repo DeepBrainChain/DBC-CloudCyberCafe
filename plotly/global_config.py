@@ -2,8 +2,13 @@
 
 import json
 import os
+import queue
+import diskcache
+
+cache = diskcache.Cache("./cache")
 
 config_file = './config.json'
+thrift_queue = queue.Queue(10)
 
 def _init():
   global _global_config
@@ -77,3 +82,41 @@ def get_value(key, defValue=None):
   except:
     # print('read ', key, ' error')
     return defValue
+
+def push_queue(item):
+  global thrift_queue
+  thrift_queue.put(item)
+
+def pop_queue():
+  global thrift_queue
+  msg = thrift_queue.get()
+  return msg
+  # if not thrift_queue.empty():
+  #   return thrift_queue.get()
+  # return None
+
+def pop_queue_nowait():
+  global thrift_queue
+  return thrift_queue.get_nowait()
+
+def queue_size():
+  global thrift_queue
+  return thrift_queue.qsize()
+
+def set_cache(key, value):
+  global cache
+  # cache.set(key, value, expire=3,read=True,tag='data',retry=True)
+  return cache.set(key, value, expire=3)
+
+def get_cache(key):
+  global cache
+  # return cache.get(key,default="",expire_time=True,tag=True)
+  return cache.get(key,default="")
+
+def delete_cache(key):
+  global cache
+  return cache.delete(key)
+
+def pop_cache(key):
+  global cache
+  return cache.pop(key)

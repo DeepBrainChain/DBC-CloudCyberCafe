@@ -1,4 +1,4 @@
-from dash import Dash, dash_table, dcc, html, callback_context
+from dash import Dash, dash_table, dcc, html, callback_context, no_update
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 import pandas as pd
@@ -11,6 +11,9 @@ import iscsi
 import dhcp
 import ipxe
 import util
+
+import rpc_handler
+from threading import Thread
 
 global_config._init()
 
@@ -406,8 +409,18 @@ app.layout = html.Div([
             ], style={'padding': 10, 'flex': 1})
         ])
     ], style=tabs_styles),
-    html.Div(id='tabs-content-props')
+    html.Div(id='tabs-content-props'),
+    dcc.Interval(id='thrift-interval',interval=1*1000,n_intervals=0)
 ])
+
+def update_ipxe_cfg(mac_addr, default_boot, super_tube):
+    root_path = global_config.get_value('http_server')['root_path']
+    format_mac = ''.join(mac_addr.split(':')).lower()
+    iscsi_setting = global_config.get_value('iscsi_setting')
+    boot_menu = global_config.get_value('boot_menu')
+    ipxe.edit_ipxe_cfg(os.path.join(root_path, 'ipxe', 'cfg'), format_mac,
+        iscsi_setting['initiator_iqn'], iscsi_setting['iscsi_target_prefix'],
+        boot_menu['name'], default_boot, super_tube)
 
 def reset_host_boot_menu(mac_addr, boot_item, super_tube):
     target_name = boot_item if super_tube else f'{boot_item}.{mac_addr}'
@@ -487,6 +500,7 @@ def load_hosts_table_item(rows, selected_row_ids, selected_rows):
     Input('power-off-button', 'n_clicks'),
     Input('reset-host-button', 'n_clicks'),
     Input('restart-dhcp-button', 'n_clicks'),
+    Input('thrift-interval', 'n_intervals'),
     State('host-mac-input', 'value'),
     State('host-name-input', 'value'),
     State('host-ip-input', 'value'),
@@ -495,14 +509,15 @@ def load_hosts_table_item(rows, selected_row_ids, selected_rows):
     State('hosts-table', 'selected_rows')
 )
 def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
-    n_clicks6, macaddr, hostname, ipaddr, default_menu,
+    n_clicks6, n_intervals, macaddr, hostname, ipaddr, default_menu,
     super_tube_value, selected_rows):
     hosts_data = global_config.get_value('hosts')
     df_hosts = pd.DataFrame.from_dict(hosts_data)
 
     if n_clicks1 == 0 and n_clicks2 == 0 and n_clicks3 == 0 and n_clicks4 == 0 \
-        and n_clicks5 == 0 and n_clicks6 == 0:
-        return df_hosts.to_dict('records'), '', []
+        and n_clicks5 == 0 and n_clicks6 == 0 and n_intervals == 0:
+        # return df_hosts.to_dict('records'), '', []
+        raise PreventUpdate
 
     # 转换所需值
     macaddr = macaddr.upper()
@@ -547,13 +562,7 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
             hosts_data['ip'].append(ipaddr)
             hosts_data['default_menu'].append(default_menu)
             hosts_data['super_tube'].append(super_tube)
-        root_path = global_config.get_value('http_server')['root_path']
-        format_mac = ''.join(macaddr.split(':')).lower()
-        iscsi_setting = global_config.get_value('iscsi_setting')
-        boot_menu = global_config.get_value('boot_menu')
-        ipxe.edit_ipxe_cfg(os.path.join(root_path, 'ipxe', 'cfg'), format_mac,
-            iscsi_setting['initiator_iqn'], iscsi_setting['iscsi_target_prefix'],
-            boot_menu['name'], default_menu, super_tube)
+        update_ipxe_cfg(macaddr, default_menu, super_tube)
     elif trigger_id == 'delete-host-button':
         if selected_rows is None or len(selected_rows) == 0:
             return df_hosts.to_dict('records'), 'selected none', selected_rows
@@ -601,6 +610,33 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
         result_code = dhcp.restart_dhcp_service()
         result_message = 'restart dhcp service failed' if result_code != 0 else ''
         return df_hosts.to_dict('records'), result_message, selected_rows
+    elif trigger_id == 'thrift-interval':
+        request_cache = global_config.get_cache('request')
+        if request_cache != "":
+            global_config.delete_cache('request')
+            print('get diskcache: ', request_cache)
+            request_list = request_cache.split(',')
+            if len(request_list) < 3:
+                global_config.set_cache('result', 'invalid request')
+            elif request_list[1] in hosts_data['ip']:
+                index_num = hosts_data['ip'].index(request_list[1])
+                boot_menu_list = global_config.get_value('boot_menu')
+                if hosts_data['default_menu'][index_num] == request_list[2]:
+                    global_config.set_cache('result', 'boot menu is same as request')
+                elif request_list[2] in boot_menu_list['name']:
+                    hosts_data['default_menu'][index_num] = request_list[2]
+                    update_ipxe_cfg(hosts_data['mac'][index_num], request_list[2],
+                        hosts_data['super_tube'][index_num])
+                    global_config.set_cache('result', 'success')
+                    global_config.set_value('hosts', hosts_data)
+                    df_hosts = pd.DataFrame.from_dict(hosts_data)
+                    global_config.write_config_file()
+                    return df_hosts.to_dict('records'), no_update, no_update
+                else:
+                    global_config.set_cache('result', 'boot menu not existed')
+            else:
+                global_config.set_cache('result', 'invalid request host')
+        return no_update, no_update, no_update
 
     global_config.set_value('hosts', hosts_data)
     df_hosts = pd.DataFrame.from_dict(hosts_data)
@@ -955,5 +991,8 @@ def edit_iscsi_setting(initiator_iqn, iscsi_target_prefix):
     return ''
 
 if __name__ == '__main__':
+    tt = Thread(target=rpc_handler.thrift_thread)
+    tt.start()
     # app.run_server(debug=True)
     app.run_server(debug=True, host='0.0.0.0')
+    print("done!")
