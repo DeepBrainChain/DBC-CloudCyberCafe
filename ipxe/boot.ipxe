@@ -1,4 +1,3 @@
 #!ipxe
 chain --autofree boot.ipxe.cfg
 chain --autofree cfg/mac-${mac:hexraw}.ipxe.cfg
-chain --replace --autofree menu.ipxe

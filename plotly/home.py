@@ -56,7 +56,7 @@ tab_selected_style = {
 
 app.layout = html.Div([
     html.H1(
-        children='Open Cloud Cybercafe',
+        children='DBC Cloud Cybercafe',
         style={
             'textAlign': 'center'
         }
@@ -293,7 +293,8 @@ app.layout = html.Div([
                     html.Label('Volume Group: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='volume-group-name-input', type='text', debounce=True,
-                        value=global_config.get_value('volume_group_name')),
+                        value=global_config.get_value('volume_group_name'),
+                        persistence=True),
                     html.Label(style={'width':10}),
                     html.Div(id='operate-volume-group-name-state')
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
@@ -302,13 +303,14 @@ app.layout = html.Div([
                     html.Label('network name: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-network-name-input', type='text', debounce=True,
-                        value=global_config.get_value('dhcp_server')['network_name']),
+                        value=global_config.get_value('dhcp_server')['network_name'],
+                        persistence=True),
                     html.Label(style={'width':10}),
                     html.Label('interface: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-interface-input', type='text', debounce=True,
                         value=global_config.get_value('dhcp_server')['interface'],
-                        style={'width':100}),
+                        persistence=True, style={'width':100}),
                     html.Label(style={'width':10}),
                     html.Div(id='operate-dhcp-network-name-state')
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
@@ -318,43 +320,45 @@ app.layout = html.Div([
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-subnet-input', type='text', debounce=True,
                         value=global_config.get_value('dhcp_server')['subnet'],
-                        style={'width':100}),
+                        persistence=True, style={'width':100}),
                     html.Label(style={'width':10}),
                     html.Label('subnet mask: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-subnet-mask-input', type='text', debounce=True,
                         value=global_config.get_value('dhcp_server')['subnet_mask'],
-                        style={'width':100}),
+                        persistence=True, style={'width':100}),
                     html.Label(style={'width':10}),
                     html.Label('range: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-range-from-input', type='text', debounce=True,
                         value=global_config.get_value('dhcp_server')['range_from'],
-                        style={'width':100}),
+                        persistence=True, style={'width':100}),
                     html.Label(style={'width':10}),
                     html.Label(' - '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-range-to-input', type='text', debounce=True,
                         value=global_config.get_value('dhcp_server')['range_to'],
-                        style={'width':100}),
+                        persistence=True, style={'width':100}),
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
                 html.Br(),
                 html.Div(children=[
                     html.Label('routers: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-routers-input', type='text', debounce=True,
-                        value=global_config.get_value('dhcp_server')['routers']),
+                        value=global_config.get_value('dhcp_server')['routers'],
+                        persistence=True),
                     html.Label(style={'width':10}),
                     html.Label('dns servers: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-dns-servers-input', type='text', debounce=True,
-                        value=global_config.get_value('dhcp_server')['dns_servers']),
+                        value=global_config.get_value('dhcp_server')['dns_servers'],
+                        persistence=True),
                     html.Label(style={'width':10}),
                     html.Label('broadcast address: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-broadcast-address-input', type='text', debounce=True,
                         value=global_config.get_value('dhcp_server')['broadcast_address'],
-                        style={'width':100}),
+                        persistence=True, style={'width':100}),
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
                 html.Br(),
                 html.Div(children=[
@@ -362,13 +366,13 @@ app.layout = html.Div([
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-filename-input', type='text', debounce=True,
                         value=global_config.get_value('dhcp_server')['filename'],
-                        style={'width':300}),
+                        persistence=True, style={'width':300}),
                     html.Label(style={'width':10}),
                     html.Label('next server: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='dhcp-next-server-input', type='text', debounce=True,
                         value=global_config.get_value('dhcp_server')['next_server'],
-                        style={'width':100}),
+                        persistence=True, style={'width':100}),
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
                 html.Div(id='operate-dhcp-server-state'),
                 html.H2('HTTP'),
@@ -376,12 +380,14 @@ app.layout = html.Div([
                     html.Label('root path: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='http-root-path-input', type='text', debounce=True,
-                        value=global_config.get_value('http_server')['root_path']),
+                        value=global_config.get_value('http_server')['root_path'],
+                        persistence=True),
                     html.Label(style={'width':10}),
                     html.Label('http ip:port '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='http-base-url-input', type='text', debounce=True,
-                        value=global_config.get_value('http_server')['base_url']),
+                        value=global_config.get_value('http_server')['base_url'],
+                        persistence=True),
                     html.Div(id='operate-http-server-state'),
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
                 html.H2('iSCSI'),
@@ -390,19 +396,19 @@ app.layout = html.Div([
                     html.Label(style={'width':10}),
                     dcc.Input(id='iscsi-server-input', type='text', debounce=True,
                         value=global_config.get_value('iscsi_setting')['server'],
-                        style={'width':100}),
+                        persistence=True, style={'width':100}),
                     html.Label(style={'width':10}),
                     html.Label('initiator iqn: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='iscsi-initiator-iqn-input', type='text', debounce=True,
                         value=global_config.get_value('iscsi_setting')['initiator_iqn'],
-                        style={'width':300}),
+                        persistence=True, style={'width':300}),
                     html.Label(style={'width':10}),
                     html.Label('target prefix: '),
                     html.Label(style={'width':10}),
                     dcc.Input(id='iscsi-target-prefix-input', type='text', debounce=True,
                         value=global_config.get_value('iscsi_setting')['iscsi_target_prefix'],
-                        style={'width':200}),
+                        persistence=True, style={'width':200}),
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
                 html.Br(),
                 html.Div(id='operate-iscsi-setting-state')
@@ -516,11 +522,11 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
 
     if n_clicks1 == 0 and n_clicks2 == 0 and n_clicks3 == 0 and n_clicks4 == 0 \
         and n_clicks5 == 0 and n_clicks6 == 0 and n_intervals == 0:
-        # return df_hosts.to_dict('records'), '', []
-        raise PreventUpdate
+        return df_hosts.to_dict('records'), '', []
+        # raise PreventUpdate
 
     # 转换所需值
-    macaddr = macaddr.upper()
+    macaddr = macaddr.upper() if macaddr else ''
     super_tube = True if super_tube_value and super_tube_value.count('Super tube') > 0 else False
 
     ctx = callback_context
@@ -636,7 +642,8 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
                     global_config.set_cache('result', 'boot menu not existed')
             else:
                 global_config.set_cache('result', 'invalid request host')
-        return no_update, no_update, no_update
+        # return no_update, no_update, no_update
+        raise PreventUpdate
 
     global_config.set_value('hosts', hosts_data)
     df_hosts = pd.DataFrame.from_dict(hosts_data)

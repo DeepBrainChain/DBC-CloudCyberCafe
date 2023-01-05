@@ -109,10 +109,11 @@ def edit_dhcp_conf_subnet(network_name, network_interface, subnet, subnet_mask,
   range_from, range_to, routers, dns_servers, broadcast_address, filename, next_server):
   dhcp_conf = f'/etc/dnsmasq.d/{network_name}.conf'
   bindings = []
-  with open(dhcp_conf, 'r', encoding='utf-8') as file:
-    for line in file:
-      if line.startswith('dhcp-host='):
-        bindings.append(line)
+  if os.path.exists(dhcp_conf):
+    with open(dhcp_conf, 'r', encoding='utf-8') as file:
+      for line in file:
+        if line.startswith('dhcp-host='):
+          bindings.append(line)
   # print(bindings)
   with open(dhcp_conf, 'w', encoding='utf-8') as file:
     file.write('port=0\n')
