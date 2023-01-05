@@ -534,19 +534,22 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
     if trigger_id == 'add-host-button':
         # if re.match('^[A-F0-9]{2}(:[A-F0-9]{2}){5}$', '00:0C:29:A8:81:F2'):
         if not re.match('^[A-Fa-f0-9]{2}(:[A-Fa-f0-9]{2}){5}$', f'{macaddr}'):
-            return df_hosts.to_dict('records'), 'invalid mac address', selected_rows
+            return df_hosts.to_dict('records'), 'invalid mac address', no_update
         if not re.match('^\w+$', f'{hostname}'):
-            return df_hosts.to_dict('records'), 'invalid host name', selected_rows
+            return df_hosts.to_dict('records'), 'invalid host name', no_update
         if not re.match(
             '((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})(\.((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})){3}',
             f'{ipaddr}'):
-            return df_hosts.to_dict('records'), 'invalid ip address', selected_rows
+            return df_hosts.to_dict('records'), 'invalid ip address', no_update
+        boot_menu_list = global_config.get_value('boot_menu')
+        if default_menu not in boot_menu_list['name']:
+            return df_hosts.to_dict('records'), 'invalid boot menu', no_update
 
         result_code, result_message = dhcp.bind_mac_address_and_ip_address(
             global_config.get_value('dhcp_server')['network_name'],
             hostname, macaddr, ipaddr)
         if result_code != 0:
-            return df_hosts.to_dict('records'), 'bind mac and ip failed', selected_rows
+            return df_hosts.to_dict('records'), 'bind mac and ip failed', no_update
 
         if macaddr in hosts_data['mac']:
             index_num = hosts_data['mac'].index(macaddr)
@@ -555,14 +558,14 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
             hosts_data['default_menu'][index_num] = default_menu
             hosts_data['super_tube'][index_num] = super_tube
             if hosts_data['host_name'].count(hostname) > 1:
-                return df_hosts.to_dict('records'), 'host name duplicated', selected_rows
+                return df_hosts.to_dict('records'), 'host name duplicated', no_update
             if hosts_data['ip'].count(ipaddr) > 1:
-                return df_hosts.to_dict('records'), 'ip address duplicated', selected_rows
+                return df_hosts.to_dict('records'), 'ip address duplicated', no_update
         else:
             if hostname in hosts_data['host_name']:
-                return df_hosts.to_dict('records'), 'host name duplicated', selected_rows
+                return df_hosts.to_dict('records'), 'host name duplicated', no_update
             if ipaddr in hosts_data['ip']:
-                return df_hosts.to_dict('records'), 'ip address duplicated', selected_rows
+                return df_hosts.to_dict('records'), 'ip address duplicated', no_update
             hosts_data['mac'].append(macaddr)
             hosts_data['host_name'].append(hostname)
             hosts_data['ip'].append(ipaddr)
@@ -592,17 +595,17 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
             selected_rows.clear()
     elif trigger_id == 'power-on-button':
         if selected_rows is None or len(selected_rows) == 0:
-            return df_hosts.to_dict('records'), 'selected none', selected_rows
+            return df_hosts.to_dict('records'), 'selected none', no_update
         else:
             print(f'power on item {selected_rows}')
     elif trigger_id == 'power-off-button':
         if selected_rows is None or len(selected_rows) == 0:
-            return df_hosts.to_dict('records'), 'selected none', selected_rows
+            return df_hosts.to_dict('records'), 'selected none', no_update
         else:
             print(f'power off item {selected_rows}')
     elif trigger_id == 'reset-host-button':
         if selected_rows is None or len(selected_rows) == 0:
-            return df_hosts.to_dict('records'), 'selected none', selected_rows
+            return df_hosts.to_dict('records'), 'selected none', no_update
         else:
             for index_num in selected_rows:
                 default_menu = hosts_data['default_menu'][index_num]
@@ -611,11 +614,11 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
                 result_code, result_message = reset_host_boot_menu(
                     format_mac, default_menu, super_tube)
                 if result_code != 0:
-                    return df_hosts.to_dict('records'), result_message, selected_rows
+                    return df_hosts.to_dict('records'), result_message, no_update
     elif trigger_id == 'restart-dhcp-button':
         result_code = dhcp.restart_dhcp_service()
         result_message = 'restart dhcp service failed' if result_code != 0 else ''
-        return df_hosts.to_dict('records'), result_message, selected_rows
+        return df_hosts.to_dict('records'), result_message, no_update
     elif trigger_id == 'thrift-interval':
         request_cache = global_config.get_cache('request')
         if request_cache != "":
@@ -698,7 +701,7 @@ def edit_operation_system_table(n_clicks1, n_clicks2,
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
     if trigger_id == 'add-os-button':
         if not re.match('^\w+$', f'{name}'):
-            return df_os.to_dict('records'), 'invalid name', selected_rows, os_data['name']
+            return df_os.to_dict('records'), 'invalid name', no_update, no_update
 
         os_data2 = global_config.get_value('data_disk')
         if name in os_data['name'] or name in os_data2['name']:
@@ -711,20 +714,23 @@ def edit_operation_system_table(n_clicks1, n_clicks2,
                 global_config.get_value('volume_group_name'),
                 name, capacity)
             if result_code != 0:
-                return df_os.to_dict('records'), result_message, selected_rows, os_data['name']
+                return df_os.to_dict('records'), result_message, no_update, no_update
             os_data['name'].append(name);
             os_data['description'].append(description)
             os_data['capacity'].append(capacity)
     elif trigger_id == 'del-os-button':
         if selected_rows is None or len(selected_rows) == 0:
-            return df_os.to_dict('records'), 'selected none', selected_rows, os_data['name']
+            return df_os.to_dict('records'), 'selected none', no_update, no_update
         else:
+            boot_menu_list = global_config.get_value('boot_menu')
             for index_num in selected_rows:
+                if os_data['name'][index_num] in boot_menu_list['operation_system']:
+                    return df_os.to_dict('records'), 'The selected operation system is in use', no_update, no_update
                 result_code, result_message = lvm2.remove_logical_volume(
                     global_config.get_value('volume_group_name'),
                     os_data['name'][index_num])
                 if result_code != 0:
-                    return df_os.to_dict('records'), result_message, selected_rows, os_data['name']
+                    return df_os.to_dict('records'), result_message, no_update, no_update
                 os_data['name'].pop(index_num)
                 os_data['description'].pop(index_num)
                 os_data['capacity'].pop(index_num)
@@ -782,7 +788,7 @@ def edit_data_disk_table(n_clicks1, n_clicks2,
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
     if trigger_id == 'add-data-disk-button':
         if not re.match('^\w+$', f'{name}'):
-            return df_data_disk.to_dict('records'), 'invalid name', selected_rows, os_data['name']
+            return df_data_disk.to_dict('records'), 'invalid name', no_update, no_update
 
         os_data2 = global_config.get_value('operation_system')
         if name in os_data['name'] or name in os_data2['name']:
@@ -795,7 +801,7 @@ def edit_data_disk_table(n_clicks1, n_clicks2,
                 global_config.get_value('volume_group_name'),
                 name, capacity)
             if result_code != 0:
-                return df_os.to_dict('records'), result_message, selected_rows, os_data['name']
+                return df_data_disk.to_dict('records'), result_message, no_update, no_update
             os_data['name'].append(name);
             os_data['description'].append(description)
             os_data['capacity'].append(capacity)
@@ -803,12 +809,17 @@ def edit_data_disk_table(n_clicks1, n_clicks2,
         if selected_rows is None or len(selected_rows) == 0:
             return df_data_disk.to_dict('records'), 'selected none', selected_rows, os_data['name']
         else:
+            boot_menu_list = global_config.get_value('boot_menu')
             for index_num in selected_rows:
+                for data_disk_string in boot_menu_list['data_disk']:
+                    data_disk_list = data_disk_string.split(",")
+                    if os_data['name'][index_num] in data_disk_list:
+                        return df_data_disk.to_dict('records'), 'The selected data disk is in use', no_update, no_update
                 result_code, result_message = lvm2.remove_logical_volume(
                     global_config.get_value('volume_group_name'),
                     os_data['name'][index_num])
                 if result_code != 0:
-                    return df_os.to_dict('records'), result_message, selected_rows, os_data['name']
+                    return df_data_disk.to_dict('records'), result_message, selected_rows, os_data['name']
                 os_data['name'].pop(index_num)
                 os_data['description'].pop(index_num)
                 os_data['capacity'].pop(index_num)
