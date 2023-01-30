@@ -16,22 +16,22 @@ def _init():
     "dhcp_server":{
       "network_name":"dbc",
       "interface":"eth0",
-      "subnet":"192.168.119.0",
+      "subnet":"192.168.1.0",
       "subnet_mask":"255.255.255.0",
-      "range_from":"192.168.119.100",
-      "range_to":"192.168.119.200",
-      "routers":"192.168.119.1",
+      "range_from":"192.168.1.100",
+      "range_to":"192.168.1.200",
+      "routers":"192.168.1.1",
       "dns_servers":"223.5.5.5",
-      "broadcast_address":"192.168.119.255",
-      "filename":"http://192.168.119.2:8080/ipxe/boot.ipxe",
-      "next_server":"192.168.119.2"
+      "broadcast_address":"192.168.1.255",
+      "filename":"http://192.168.1.2:8080/ipxe/boot.ipxe",
+      "next_server":"192.168.1.2"
     },
     "http_server":{
       "root_path":"/var/www/file",
-      "base_url":"http://192.168.119.2:8080"
+      "base_url":"http://192.168.1.2:8080"
     },
     "iscsi_setting":{
-      "server":"192.168.119.2",
+      "server":"192.168.1.2",
       "iscsi_target_prefix":"iqn.2022-10.org.dbc.iscsi",
       "initiator_iqn":"iqn.2022-10.org.dbc.iscsi:global.client",
     },

@@ -24,7 +24,7 @@ import shutil
 #       if line.find('_binding.conf') != -1:
 #         continue
 #       w.write(line)
-#   with open(dhcp_conf, 'a', encoding='tf-8') as w:
+#   with open(dhcp_conf, 'a', encoding='utf-8') as w:
 #     w.write('\n%s' % subnet_content)
 #     w.write('\n%s' % binding_content)
 #   if os.path.exists(old_subnet_file):
@@ -122,16 +122,20 @@ def edit_dhcp_conf_subnet(network_name, network_interface, subnet, subnet_mask,
     file.write(f'dhcp-option=option:router,{routers}\n')
     file.write(f'dhcp-option=option:dns-server,{dns_servers}\n')
     # file.write('dhcp-no-override\n\n')
-    file.write('dhcp-match=set:iPXE,option:user-class,"iPXE"\n')
+    file.write('dhcp-match=set:ipxe,175\n')
     file.write('dhcp-match=set:bios,option:client-arch,0\n\n')
-    file.write(f'dhcp-boot=tag:bios,undionly.kpxe,,{next_server}\n')
-    file.write(f'dhcp-boot=tag:!bios,ipxe.efi,,{next_server}\n')
-    file.write(f'dhcp-boot=net:iPXE,{filename},,{next_server}\n\n')
-    file.write('pxe-prompt="Booting from iPXE",1\n\n')
+    file.write(f'dhcp-boot=tag:!ipxe,tag:bios,undionly.kpxe,,{next_server}\n')
+    file.write(f'dhcp-boot=tag:!ipxe,tag:!bios,ipxe.efi,,{next_server}\n')
+    file.write(f'dhcp-boot=tag:ipxe,{filename},,{next_server}\n\n')
+    file.write('pxe-prompt="Booting from iPXE",3\n\n')
+    file.write(f'pxe-service=X86PC,"Boot to X86PC",undionly.kpxe,{next_server}\n')
+    file.write(f'pxe-service=X86-64_EFI,"Boot to X86-64_EFI",ipxe.efi,{next_server}\n')
+    file.write(f'pxe-service=BC_EFI,"Boot to BC_EFI",ipxe.efi,{next_server}\n\n')
     file.write(f'interface={network_interface}\n')
     for line in bindings:
       file.write(f'{line}')
-    file.write(f'dhcp-range={range_from},{range_to},{subnet_mask},45m\n')
+    # file.write(f'dhcp-range={range_from},{range_to},{subnet_mask},45m\n')
+    file.write(f'dhcp-range={range_from},proxy,{subnet_mask},45m\n')
   return 0, f'edit {network_name}.conf successful'
 
 def bind_mac_address_and_ip_address(network_name, hostname, mac_addr, ip_addr):

@@ -32,6 +32,13 @@ hosts_precautions = '''
 
 1. 添加修改删除 host_name, ip address, mac address 需要重启 DHCP 服务才能生效。
 2. host_name, ip address, mac address 均不能重复。
+3. 若无盘网络启动服务器重启，会导致某些服务设置丢失，请在控制台重新运行后首先点击上面的 "Restore the environment and settings after the server restarts" 按钮来恢复运行环境和设置。
+4. 修改基础无盘镜像的步骤:
+    - 4.1. 修改前请先关闭所有正在使用此镜像的所有机器，只保留运行超管权限的一台机器；
+    - 4.2. 点击Boot Menu表格下的"Delete boot menu snap"清理所有基础镜像的快照。
+    - 4.3. 使用超管权限启动保留的机器，进入基础镜像中修改需要的设置、安装软件或者下载游戏。
+    - 4.4. 修改完成后关机，取消超管权限，再次启动其他机器前依旧需要重新生成镜像快照。
+    - 4.5. 使用新的镜像快照启动使用。
 '''
 
 app = Dash(__name__)
@@ -139,7 +146,7 @@ app.layout = html.Div([
                     html.Label(style={'width':10}),
                     html.Button('Power Off', id='power-off-button', n_clicks=0),
                     html.Label(style={'width':10}),
-                    html.Button('Reset Host iSCSI', id='reset-host-button', n_clicks=0),
+                    html.Button('Reset Host Image', id='reset-host-image', n_clicks=0),
                     # html.Label(style={'width':10}),
                     # dcc.Checklist(id='super-tube-checklist', options=['Super tube']),
                     html.Label(style={'width':10}),
@@ -147,6 +154,11 @@ app.layout = html.Div([
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
                 html.Br(),
                 html.Div(id='operate-host-state'),
+                html.Div(children=[
+                    html.Button('Restore the environment and settings after the \
+                    server restarts', id='restore-after-restart-button', n_clicks=0),
+                    html.Div(id='restore-after-restart-state')
+                ], style={'display': 'flex', 'flex-direction': 'row'}),
                 dcc.Markdown(children=hosts_precautions)
             ], style={'padding': 10, 'flex': 1})
         ]),
@@ -280,6 +292,8 @@ app.layout = html.Div([
                     html.Button('Add boot menu', id='add-boot-menu-button', n_clicks=0),
                     html.Label(style={'width':10}),
                     html.Button('Delete boot menu', id='del-boot-menu-button', n_clicks=0),
+                    html.Label(style={'width':10}),
+                    html.Button('Delete boot menu snap', id='del-boot-menu-snap-button', n_clicks=0),
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
                 html.Br(),
                 html.Div(id='operate-boot-menu-state')
@@ -297,6 +311,13 @@ app.layout = html.Div([
                         persistence=True),
                     html.Label(style={'width':10}),
                     html.Div(id='operate-volume-group-name-state')
+                ], style={'display': 'flex', 'flex-direction': 'row'}),
+                html.Br(),
+                html.Div(children=[
+                    html.Label('COW LV Size(G): '),
+                    html.Label(style={'width':10}),
+                    dcc.Input(id='cow-lv-size-input', type='number', value=10,
+                        min=1, max=1024, step=1, persistence=True),
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
                 html.H2('DHCP'),
                 html.Div(children=[
@@ -416,7 +437,8 @@ app.layout = html.Div([
         ])
     ], style=tabs_styles),
     html.Div(id='tabs-content-props'),
-    dcc.Interval(id='thrift-interval',interval=1*1000,n_intervals=0)
+    dcc.Interval(id='thrift-interval',interval=1*500,n_intervals=0),
+    dcc.Store(id='thrift-network-notify')
 ])
 
 def update_ipxe_cfg(mac_addr, default_boot, super_tube):
@@ -428,42 +450,66 @@ def update_ipxe_cfg(mac_addr, default_boot, super_tube):
         iscsi_setting['initiator_iqn'], iscsi_setting['iscsi_target_prefix'],
         boot_menu['name'], default_boot, super_tube)
 
-def reset_host_boot_menu(mac_addr, boot_item, super_tube):
-    target_name = boot_item if super_tube else f'{boot_item}.{mac_addr}'
+def reset_host_boot_menu(mac_addr, boot_item, snap_lv_size):
     iscsi_setting = global_config.get_value('iscsi_setting')
-    iscsi.delete_iscsi_target(target_name, iscsi_setting['iscsi_target_prefix'], not super_tube)
+    iscsi.delete_snap_iscsi_objects_by_host(iscsi_setting['iscsi_target_prefix'],
+        boot_item, mac_addr)
 
     boot_menu = global_config.get_value('boot_menu')
     if boot_item not in boot_menu['name']:
         return 1, 'boot item not existed'
-
-    volume_group = global_config.get_value('volume_group_name')
-    if not super_tube:
-        lv_list = lvm2.get_logical_volume_list(volume_group)
-        for item in lv_list:
-            if item.endswith(mac_addr):
-                lvm2.remove_logical_volume(volume_group, item)
 
     menu_index = boot_menu['name'].index(boot_item)
     disks = []
     disks.append(boot_menu['operation_system'][menu_index])
     disks.extend(boot_menu['data_disk'][menu_index].split(','))
     disks = util.deduplication(disks)
-    if not super_tube:
-        for index, disk in enumerate(disks):
-            result_code, result_message = lvm2.create_snapshot_logical_volume(
-                volume_group, disk, mac_addr, 1)
-            if result_code != 0:
-                return result_code, result_message
-            disks[index] = f'{disk}_{mac_addr}'
 
-    result_code, result_message = iscsi.create_iscsi_target(target_name, disks,
-        iscsi_setting['iscsi_target_prefix'], iscsi_setting['initiator_iqn'])
+    volume_group = global_config.get_value('volume_group_name')
+    lv_list = lvm2.get_logical_volume_list(volume_group)
+
+    for index, disk in enumerate(disks):
+        snap_disk = f'{disk}_{mac_addr}'
+        # if snap_disk in lv_list:
+        lvm2.remove_logical_volume(volume_group, snap_disk)
+        result_code, result_message = lvm2.create_snapshot_logical_volume(
+            volume_group, disk, mac_addr, snap_lv_size)
+        if result_code != 0:
+            return result_code, result_message
+        disks[index] = snap_disk
+
+    initiator_iqn = '%s:sn.%s.%s' % (iscsi_setting['iscsi_target_prefix'],
+        boot_item, mac_addr)
+    result_code, result_message = iscsi.create_iscsi_target(boot_item, disks,
+        iscsi_setting['iscsi_target_prefix'], initiator_iqn)
     if result_code != 0:
         for disk in disks:
             lvm2.remove_logical_volume(volume_group, disk)
         return result_code, result_message
     return 0, 'reset successful'
+
+def remove_snapshot_storage_item_of_host(mac_addr, boot_item):
+    iscsi_setting = global_config.get_value('iscsi_setting')
+    iscsi.delete_snap_iscsi_objects_by_host(iscsi_setting['iscsi_target_prefix'],
+        boot_item, mac_addr)
+
+    boot_menu = global_config.get_value('boot_menu')
+    menu_index = boot_menu['name'].index(boot_item)
+    disks = []
+    disks.append(boot_menu['operation_system'][menu_index])
+    disks.extend(boot_menu['data_disk'][menu_index].split(','))
+    disks = util.deduplication(disks)
+
+    volume_group = global_config.get_value('volume_group_name')
+
+    for index, disk in enumerate(disks):
+        snap_disk = f'{disk}_{mac_addr}'
+        lvm2.remove_logical_volume(volume_group, snap_disk)
+
+def remove_snapshot_storage_of_host(mac_addr):
+    boot_menu = global_config.get_value('boot_menu')
+    for boot_item in boot_menu['name']:
+        remove_snapshot_storage_item_of_host(mac_addr, boot_item)
 
 @app.callback(
     Output('host-name-input', 'value'),
@@ -504,24 +550,25 @@ def load_hosts_table_item(rows, selected_row_ids, selected_rows):
     Input('delete-host-button', 'n_clicks'),
     Input('power-on-button', 'n_clicks'),
     Input('power-off-button', 'n_clicks'),
-    Input('reset-host-button', 'n_clicks'),
+    Input('reset-host-image', 'n_clicks'),
     Input('restart-dhcp-button', 'n_clicks'),
-    Input('thrift-interval', 'n_intervals'),
+    Input('thrift-network-notify', 'data'),
     State('host-mac-input', 'value'),
     State('host-name-input', 'value'),
     State('host-ip-input', 'value'),
     State('host-default-menu-dropdown', 'value'),
     State('host-super-tube-checklist', 'value'),
-    State('hosts-table', 'selected_rows')
+    State('hosts-table', 'selected_rows'),
+    State('cow-lv-size-input', 'value')
 )
 def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
-    n_clicks6, n_intervals, macaddr, hostname, ipaddr, default_menu,
-    super_tube_value, selected_rows):
+    n_clicks6, thrift_request_data, macaddr, hostname, ipaddr, default_menu,
+    super_tube_value, selected_rows, snap_lv_size):
     hosts_data = global_config.get_value('hosts')
     df_hosts = pd.DataFrame.from_dict(hosts_data)
 
     if n_clicks1 == 0 and n_clicks2 == 0 and n_clicks3 == 0 and n_clicks4 == 0 \
-        and n_clicks5 == 0 and n_clicks6 == 0 and n_intervals == 0:
+        and n_clicks5 == 0 and n_clicks6 == 0 and thrift_request_data is None:
         return df_hosts.to_dict('records'), '', []
         # raise PreventUpdate
 
@@ -587,6 +634,8 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
                 format_mac = ''.join(hosts_data['mac'][index_num].split(':')).lower()
                 ipxe.delete_ipxe_cfg(os.path.join(root_path, 'ipxe', 'cfg', \
                     f'mac-{format_mac}.ipxe.cfg'))
+                # remove all snapshot iscsi storage and logical storage of host
+                remove_snapshot_storage_of_host(format_mac)
                 hosts_data['host_name'].pop(index_num)
                 hosts_data['ip'].pop(index_num)
                 hosts_data['mac'].pop(index_num)
@@ -603,7 +652,7 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
             return df_hosts.to_dict('records'), 'selected none', no_update
         else:
             print(f'power off item {selected_rows}')
-    elif trigger_id == 'reset-host-button':
+    elif trigger_id == 'reset-host-image':
         if selected_rows is None or len(selected_rows) == 0:
             return df_hosts.to_dict('records'), 'selected none', no_update
         else:
@@ -612,19 +661,16 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
                 format_mac = ''.join(hosts_data['mac'][index_num].split(':')).lower()
                 super_tube = hosts_data['super_tube'][index_num]
                 result_code, result_message = reset_host_boot_menu(
-                    format_mac, default_menu, super_tube)
+                    format_mac, default_menu, snap_lv_size)
                 if result_code != 0:
                     return df_hosts.to_dict('records'), result_message, no_update
     elif trigger_id == 'restart-dhcp-button':
         result_code = dhcp.restart_dhcp_service()
         result_message = 'restart dhcp service failed' if result_code != 0 else ''
         return df_hosts.to_dict('records'), result_message, no_update
-    elif trigger_id == 'thrift-interval':
-        request_cache = global_config.get_cache('request')
-        if request_cache != "":
-            global_config.delete_cache('request')
-            print('get diskcache: ', request_cache)
-            request_list = request_cache.split(',')
+    elif trigger_id == 'thrift-network-notify':
+        if thrift_request_data is not None and thrift_request_data != "":
+            request_list = thrift_request_data.split(',')
             if len(request_list) < 3:
                 global_config.set_cache('result', 'invalid request')
             elif request_list[1] in hosts_data['ip']:
@@ -652,6 +698,33 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
     df_hosts = pd.DataFrame.from_dict(hosts_data)
     global_config.write_config_file()
     return df_hosts.to_dict('records'), '', selected_rows
+
+@app.callback(
+    Output('thrift-network-notify', 'data'),
+    Input('thrift-interval', 'n_intervals')
+)
+def interval_update(n_intervals):
+    request_cache = global_config.get_cache('request')
+    if request_cache != "":
+        global_config.delete_cache('request')
+        print('get thrift request in diskcache: ', request_cache)
+        return request_cache
+    return no_update
+
+@app.callback(
+    Output('restore-after-restart-state', 'children'),
+    Input('restore-after-restart-button', 'n_clicks')
+)
+def restore_after_restart(n_clicks):
+    if n_clicks == 0:
+        return ''
+    volume_group = global_config.get_value('volume_group_name')
+    result_code, result_message = lvm2.restore_after_restart(volume_group)
+    if result_code != 0:
+        return result_message
+    result_code, result_message = iscsi.restore_after_restart()
+    if result_code != 0:
+        return result_message
 
 @app.callback(
     Output('os-name-input', 'value'),
@@ -861,40 +934,55 @@ def load_boot_menu_table_item(rows, selected_row_ids, selected_rows):
     Output('host-default-menu-dropdown', 'options'),
     Input('add-boot-menu-button', 'n_clicks'),
     Input('del-boot-menu-button', 'n_clicks'),
+    Input('del-boot-menu-snap-button', 'n_clicks'),
     State('boot-menu-name-input', 'value'),
     State('boot-menu-operation-system-dropdown', 'value'),
     State('boot-menu-data-disk-dropdown', 'value'),
     State('boot-menu-table', 'selected_rows')
 )
-def edit_boot_menu_table(n_clicks1, n_clicks2,
+def edit_boot_menu_table(n_clicks1, n_clicks2, n_clicks3,
     name, operation_system, data_disk, selected_rows):
-    os_data = global_config.get_value('boot_menu')
-    df_boot_menu = pd.DataFrame.from_dict(os_data)
-    if n_clicks1 == 0 and n_clicks2 == 0:
-        return df_boot_menu.to_dict('records'), '', [], os_data['name']
+    bm_data = global_config.get_value('boot_menu')
+    df_boot_menu = pd.DataFrame.from_dict(bm_data)
+    if n_clicks1 == 0 and n_clicks2 == 0 and n_clicks3 == 0:
+        return df_boot_menu.to_dict('records'), '', [], bm_data['name']
 
     ctx = callback_context
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
     if trigger_id == 'add-boot-menu-button':
         if not re.match('^\w+$', f'{name}'):
-            return df_boot_menu.to_dict('records'), 'invalid name', selected_rows, os_data['name']
-
-        if name in os_data['name']:
+            return df_boot_menu.to_dict('records'), 'invalid name', no_update, no_update
+        if operation_system is None or len(operation_system) == 0:
             return df_boot_menu.to_dict('records'), \
-                'already existed, unsupport modify', selected_rows, os_data['name']
-            # index_num = os_data['name'].index(name)
-            # os_data['operation_system'][index_num] = operation_system
+                'empty operation system', no_update, no_update
+
+        if name in bm_data['name']:
+            return df_boot_menu.to_dict('records'), \
+                'already existed, unsupport modify', selected_rows, bm_data['name']
+            # index_num = bm_data['name'].index(name)
+            # bm_data['operation_system'][index_num] = operation_system
         else:
-            os_data['name'].append(name);
-            os_data['operation_system'].append(operation_system)
-            os_data['data_disk'].append(','.join(data_disk))
+            iscsi_setting = global_config.get_value('iscsi_setting')
+            disks = []
+            disks.append(operation_system)
+            disks.extend(data_disk)
+            disks = util.deduplication(disks)
+            initiator_iqn = '%s:sn.%s' % (iscsi_setting['iscsi_target_prefix'], name)
+            result_code, result_message = iscsi.create_iscsi_target(name, disks,
+                iscsi_setting['iscsi_target_prefix'], initiator_iqn)
+            if result_code != 0:
+                return df_boot_menu.to_dict('records'), result_message, \
+                    no_update, no_update
+            bm_data['name'].append(name);
+            bm_data['operation_system'].append(operation_system)
+            bm_data['data_disk'].append(','.join(data_disk))
     elif trigger_id == 'del-boot-menu-button':
         if selected_rows is None or len(selected_rows) == 0:
             return df_boot_menu.to_dict('records'), 'selected none', \
-                selected_rows, os_data['name']
+                selected_rows, bm_data['name']
         else:
             for index_num in selected_rows:
-                menu_item = os_data['name'][index_num]
+                menu_item = bm_data['name'][index_num]
                 target_list = iscsi.get_iscsi_target_list()
                 iscsi_setting = global_config.get_value('iscsi_setting')
                 target_prefix = iscsi_setting['iscsi_target_prefix']
@@ -904,15 +992,31 @@ def edit_boot_menu_table(n_clicks1, n_clicks2,
                 for target in target_list:
                     if target == f'{target_prefix}:sn.{menu_item}':
                         iscsi.delete_iscsi_target_by_wwn(target)
-                os_data['name'].pop(index_num)
-                os_data['operation_system'].pop(index_num)
-                os_data['data_disk'].pop(index_num)
+                bm_data['name'].pop(index_num)
+                bm_data['operation_system'].pop(index_num)
+                bm_data['data_disk'].pop(index_num)
             selected_rows.clear()
+    elif trigger_id == 'del-boot-menu-snap-button':
+        if selected_rows is None or len(selected_rows) == 0:
+            return df_boot_menu.to_dict('records'), 'selected none', \
+                selected_rows, bm_data['name']
+        else:
+            for index_num in selected_rows:
+                menu_item = bm_data['name'][index_num]
+                # delete all snap iscsi and storage of disks in boot menu
+                # 目的是为了在修改母镜像的时候，断开快照镜像的使用，避免冲突
+                iscsi_setting = global_config.get_value('iscsi_setting')
+                disks = []
+                disks.append(bm_data['operation_system'][index_num])
+                disks.extend(bm_data['data_disk'][index_num].split(','))
+                disks = util.deduplication(disks)
+                iscsi.delete_snap_iscsi_objects(iscsi_setting['iscsi_target_prefix'],
+                    menu_item, disks)
 
-    global_config.set_value('boot_menu', os_data)
-    df_boot_menu = pd.DataFrame.from_dict(os_data)
+    global_config.set_value('boot_menu', bm_data)
+    df_boot_menu = pd.DataFrame.from_dict(bm_data)
     global_config.write_config_file()
-    return df_boot_menu.to_dict('records'), '', selected_rows, os_data['name']
+    return df_boot_menu.to_dict('records'), '', selected_rows, bm_data['name']
 
 @app.callback(
     Output('operate-volume-group-name-state', 'children'),

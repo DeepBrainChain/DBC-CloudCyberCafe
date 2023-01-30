@@ -131,3 +131,18 @@ dhcp-range=192.168.1.50,192.168.1.80,255.255.255.0,45m
 
 - https://thrift.apache.org/
 - https://github.com/apache/thrift
+
+## 镜像制作上传流程
+
+1. 给无盘客户端的自带硬盘安装上Windows系统和必要的驱动，解决设备管理器的感叹号，或者禁用感叹号的设备。
+2. 将注册表`HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Session Manager\Memory Management`的`PagingFiles`项的值清空。此操作跟虚拟内存有关。需要手动重启生效。
+3. 启动iSCSI发起程序，修改配置中发起程序名称，输入无盘服务器的IP地址，连接远程磁盘。
+4. 重启以使某些修改生效。
+5. 使用磁盘精灵[DiskGenius](https://www.diskgenius.cn/)克隆磁盘，热迁移系统。将此时的系统所在整个磁盘上传到无盘存储磁盘。
+
+镜像的上传方式:
+此方式以后会优化，升级成热迁移或者进入WinPE使用磁盘精灵操作。
+
+备注:
+1. 测试阶段请先使用纯系统和必要的驱动来测试，启动成功后再安装其他软件游戏进一步测试。
+2. 镜像的上传方式以后会优化，升级成热迁移或者进入WinPE使用磁盘精灵操作。

@@ -8,7 +8,7 @@ def is_volume_group_existed(volume_group):
   return os.system(f"sudo vgs | grep '{volume_group}'") == 0
 
 def get_logical_volume_list(volume_group):
-  cmd_output = os.popen(f'lvs -a {volume_group} -o lv_name --noheadings | tr "\n" "|"').read()
+  cmd_output = os.popen(f'sudo lvs -a {volume_group} -o lv_name --noheadings | tr "\n" "|"').read()
   lv_list = cmd_output.split('|')
   for index, item in enumerate(lv_list):
     lv_list[index] = item.strip()
@@ -75,3 +75,23 @@ def create_snapshot_logical_volume(volume_group, logical_volume, mac_addr, capac
 
 def remove_snapshot_logical_volume(volume_group, logical_volume, macaddr):
   return 0
+
+def list_mount_point_in_lvm():
+  cmd_output=os.popen("df -h | awk '{print $6}' | grep '/mnt/' | tr '\n' '|'").read()
+  mount_list = cmd_output.split('|')
+  mpl=[]
+  for item in mount_list:
+    if len(item) > 5:
+      mpl.append(item[5:])
+  return mpl
+
+def restore_after_restart(volume_group):
+  mount_list = list_mount_point_in_lvm()
+  lv_list = get_logical_volume_list(volume_group)
+  for logical_volume in lv_list:
+    if logical_volume not in mount_list:
+      ret = os.system(
+        f"sudo mount /dev/{volume_group}/{logical_volume} /mnt/{logical_volume}")
+      if ret != 0:
+        return ret, f'mount logical volume {logical_volume} failed'
+  return 0, 'restore mount state successful'

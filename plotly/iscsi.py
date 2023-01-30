@@ -134,8 +134,10 @@ def create_iscsi_target(target_name, disks, target_prefix, initiator_iqn):
   tpg = rtslib.TPG(target, 1)
   nodeacl = rtslib.NodeACL(tpg, initiator_iqn)
   portal = rtslib.NetworkPortal(tpg, "0.0.0.0", 3260)
+  cur_index = len(list(tpg.luns))
   for index, fis in enumerate(fss):
-    lun = rtslib.LUN(tpg, index, fis)
+    lun = rtslib.LUN(tpg, cur_index, fis)
+    cur_index += 1
     mlun = rtslib.MappedLUN(nodeacl, index, lun)
   tpg.set_attribute("authentication", "0")
   tpg.enable = True
@@ -155,5 +157,60 @@ def delete_iscsi_target_by_wwn(target_wwn, with_backstores = True):
     return 1, f'target {target_wwn} not existed'
   return 0, f'delete iscsi target {target_wwn} successful'
 
-def delete_iscsi_target(target_name, target_prefix, with_backstores = True):
-  return delete_iscsi_target_by_wwn('%s:sn.%s' % (target_prefix, target_name), with_backstores)
+def delete_iscsi_target(target_prefix, boot_item):
+  # lookup iscsi target
+  try:
+    iscsi = rtslib.FabricModule("iscsi")
+    target = rtslib.Target(iscsi, '%s:sn.%s' % (target_prefix, boot_item), 'lookup')
+    if with_backstores:
+      for tpg in target.tpgs:
+        for lun in tpg.luns:
+          lun.storage_object.delete()
+    target.delete()
+  except:
+    return 1, f'target {boot_item} not existed'
+  return 0, f'delete iscsi target {boot_item} successful'
+
+def delete_snap_iscsi_objects_by_host(target_prefix, boot_item, mac_addr):
+  # lookup iscsi target
+  try:
+    iscsi = rtslib.FabricModule("iscsi")
+    target = rtslib.Target(iscsi, '%s:sn.%s' % (target_prefix, boot_item), 'lookup')
+    for tpg in target.tpgs:
+      for acl in tpg.node_acls:
+        if acl.node_wwn == f'{target_prefix}:sn.{boot_item}.{mac_addr}':
+          acl.delete()
+          break
+      for lun in tpg.luns:
+        if lun.storage_object.name.endswith(mac_addr):
+          lun.storage_object.delete()
+  except:
+    return 1, f'delete snap iscsi objects {boot_item} of {mac_addr} failed'
+  return 0, f'delete snap iscsi objects {boot_item} of {mac_addr} successful'
+
+def delete_snap_iscsi_objects(target_prefix, boot_item, disks):
+  # lookup iscsi target
+  try:
+    iscsi = rtslib.FabricModule("iscsi")
+    target = rtslib.Target(iscsi, '%s:sn.%s' % (target_prefix, boot_item), 'lookup')
+    for tpg in target.tpgs:
+      for acl in tpg.node_acls:
+        if acl.node_wwn.startswith(f'{target_prefix}:sn.{boot_item}.'):
+          acl.delete()
+          break
+      for lun in tpg.luns:
+        if lun.storage_object.name not in disks:
+          lun.storage_object.delete()
+  except:
+    return 1, f'delete snap iscsi objects {boot_item} failed'
+  return 0, f'delete snap iscsi objects {boot_item} successful'
+
+def restore_after_restart():
+  try:
+    root = rtslib.RTSRoot()
+    # root.restore_from_file()
+    root.restore_from_file(restore_file='/etc/rtslib-fb-targets/saveconfig.json')
+    # root.restore_from_file(restore_file='/etc/target/saveconfig.json')
+  except:
+    return 1, 'Error occurred, please contact the developer'
+  return 0, 'restore iscsi target successful'
