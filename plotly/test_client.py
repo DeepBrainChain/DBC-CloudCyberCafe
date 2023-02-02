@@ -90,7 +90,7 @@ def main():
         bml = stringToThrift(rs.message, bml, MessageType.GET_BOOT_MENU)
         print(f'BootMenuList:{bml.menus}')
 
-    # bm = BootMenu(menu='windows21h1',superTube=False)
+    # bm = BootMenu(menu='wintest',superTube=True)
     bm = BootMenu(menu='ubuntu1804',superTube=False)
     setBootMenuMsg = Message(
         version=0x01000001,
@@ -99,6 +99,27 @@ def main():
         host='192.168.1.101')
     rs = client.handleMessage(setBootMenuMsg)
     print(f'setBootMenuMsg return ResultStruct{{{rs.code}, {rs.message}}}')
+
+    getSmyooDeviceInfoMsg = Message(
+        version=0x01000001,
+        type=MessageType.GET_SMYOO_DEVICE_INFO,
+        body='',
+        host='asus')
+    rs = client.handleMessage(getSmyooDeviceInfoMsg)
+    print(f'getSmyooDeviceInfo return ResultStruct{{{rs.code}, {rs.message}}}')
+    if rs.code == 0:
+        info = SmyooDeviceInfo()
+        info = stringToThrift(rs.message, info, MessageType.GET_SMYOO_DEVICE_INFO)
+        print(f'SmyooDeviceInfo:{info}')
+
+    sdp = SmyooDevicePowerData(status=1,mcuname='asus')
+    setSmyooDevicePowerMsg = Message(
+        version=0x01000001,
+        type=MessageType.SET_SMYOO_DEVICE_POWER,
+        body=thriftToString(sdp, MessageType.SET_SMYOO_DEVICE_POWER),
+        host='asus')
+    rs = client.handleMessage(setSmyooDevicePowerMsg)
+    print(f'setSmyooDevicePower return ResultStruct{{{rs.code}, {rs.message}}}')
     # Close!
     transport.close()
 

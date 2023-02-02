@@ -30,7 +30,9 @@ enum MessageType {
   GET_USER_LIST = 4,
   SET_USER_PASSWORD = 5,
   GET_BOOT_MENU = 32,
-  SET_BOOT_MENU = 33
+  SET_BOOT_MENU = 33,
+  GET_SMYOO_DEVICE_INFO = 34,
+  SET_SMYOO_DEVICE_POWER = 35
 }
 
 struct Message {
@@ -61,6 +63,20 @@ struct BootMenuList {
 struct BootMenu {
   1: required string menu,
   2: required bool superTube
+}
+
+struct SmyooDeviceInfo {
+  1: required string mcuname,
+  2: required string note,
+  3: required i32 isonline,
+  4: required i32 power,
+  5: required string mcuid
+}
+
+struct SmyooDevicePowerData {
+  1: required i32 status,
+  2: optional string mcuid,
+  3: optional string mcuname
 }
 
 /**

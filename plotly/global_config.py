@@ -83,6 +83,34 @@ def get_value(key, defValue=None):
     # print('read ', key, ' error')
     return defValue
 
+def find_host_name(hostname=None, ip=None, mac=None):
+  hosts_data = get_value('hosts')
+  if hostname and hostname in hosts_data['host_name']:
+    return hostname
+  if ip is None and mac is None:
+    return None
+  if mac and mac in hosts_data['mac']:
+    index_num = hosts_data['mac'].index(mac)
+    return hosts_data['host_name'][index_num]
+  if ip and ip in hosts_data['ip']:
+    index_num = hosts_data['ip'].index(ip)
+    return hosts_data['host_name'][index_num]
+  return None
+
+def find_host_ip(hostname=None, ip=None, mac=None):
+  hosts_data = get_value('hosts')
+  if ip and ip in hosts_data['ip']:
+    return ip
+  if hostname is None and mac is None:
+    return None
+  if mac and mac in hosts_data['mac']:
+    index_num = hosts_data['mac'].index(mac)
+    return hosts_data['ip'][index_num]
+  if hostname and hostname in hosts_data['host_name']:
+    index_num = hosts_data['host_name'].index(hostname)
+    return hosts_data['ip'][index_num]
+  return None
+
 def push_queue(item):
   global thrift_queue
   thrift_queue.put(item)
@@ -103,15 +131,15 @@ def queue_size():
   global thrift_queue
   return thrift_queue.qsize()
 
-def set_cache(key, value):
+def set_cache(key, value, expire=None):
   global cache
   # cache.set(key, value, expire=3,read=True,tag='data',retry=True)
-  return cache.set(key, value, expire=3)
+  return cache.set(key, value, expire=expire)
 
-def get_cache(key):
+def get_cache(key, default=None):
   global cache
   # return cache.get(key,default="",expire_time=True,tag=True)
-  return cache.get(key,default="")
+  return cache.get(key,default=default)
 
 def delete_cache(key):
   global cache
@@ -120,3 +148,16 @@ def delete_cache(key):
 def pop_cache(key):
   global cache
   return cache.pop(key)
+
+def get_smyoo_device_info(hostname):
+  devicesContent = get_cache('smyoo_devices',default='')
+  if len(devicesContent) == 0:
+    return None
+  try:
+    devices = json.loads(devicesContent)
+    for device in devices:
+      if device['mcuname'] == hostname:
+        return device
+  except:
+    print('get smyoo host mcuid failed')
+  return None

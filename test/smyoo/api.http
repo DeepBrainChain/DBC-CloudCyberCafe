@@ -1,0 +1,147 @@
+### 1. 登录接口
+POST https://auth.smyoo.com/v1/account/synloginopen HTTP/1.1
+Content-Type: application/json; charset=UTF-8
+Host: auth.smyoo.com
+Cookie: BpeSessionId=
+Content-Length: 206
+Expect: 100-continue
+Connection: Keep-Alive
+
+{
+  "appId":1314,
+  "endpointOS":1,
+  "areaId":0,
+  "clientVersion":"",
+  "phone":"17********3",
+  "password":"a*****3",
+  "deviceId":"D6AB6C159B1FE1F8EF33109CDEE0D9AD",
+  "autologin":"true",
+  "client_id":"86921651",
+  "client_secret":"C0A53D2EFF2E4B418BB6B66A0F575EC5"
+}
+
+### 2. 验证票据
+POST https://auth.smyoo.com/api/gfriend/synloginticket HTTP/1.1
+Content-Type: application/json; charset=UTF-8
+Host: auth.smyoo.com
+Cookie: BpeSessionId=
+Content-Length: 178
+Expect: 100-continue
+Connection: Keep-Alive
+
+{
+  "appId":1314,
+  "endpointOS":1,
+  "clientVersion":"",
+  "ticket":"89311751000035001571973136",
+  "deviceId":"D6AB6C159B1FE1F8EF33109CDEE0D9AD",
+  "context":"A3C64845E49049BF8EA4027B6828CEF1"
+}
+
+### 3. 获取设备信息是否发生变化
+POST https://auth.smyoo.com/api/gfriend/statuschanged HTTP/1.1
+Content-Type: application/json; charset=UTF-8
+Host: auth.smyoo.com
+Cookie: BpeSessionId=HJY_67FC1EBDC2D9411B969830DFDE8D5266
+Content-Length: 139
+Expect: 100-continue
+Connection: Keep-Alive
+
+{
+  "appId":1314,
+  "endpointOS":1,
+  "clientVersion":"",
+  "deviceId":"D6AB6C159B1FE1F8EF33109CDEE0D9AD",
+  "context":"A3C64845E49049BF8EA4027B6828CEF1"
+}
+
+### 4. 获取所有设备信息
+POST https://auth.smyoo.com/api/gfriend/querydevices HTTP/1.1
+Content-Type: application/json; charset=UTF-8
+Host: auth.smyoo.com
+Cookie: BpeSessionId=HJY_67FC1EBDC2D9411B969830DFDE8D5266
+Content-Length: 139
+Expect: 100-continue
+Connection: Keep-Alive
+
+{
+  "appId":1314,
+  "endpointOS":1,
+  "clientVersion":"",
+  "deviceId":"D6AB6C159B1FE1F8EF33109CDEE0D9AD",
+  "context":"A3C64845E49049BF8EA4027B6828CEF1"
+}
+
+### 5. 获取设备状态
+POST https://auth.smyoo.com/api/gfriend/getdevicedata HTTP/1.1
+Content-Type: application/json; charset=UTF-8
+Host: auth.smyoo.com
+Cookie: BpeSessionId=HJY_67FC1EBDC2D9411B969830DFDE8D5266
+Content-Length: 182
+Expect: 100-continue
+Connection: Keep-Alive
+
+{
+  "appId":1314,
+  "endpointOS":1,
+  "clientVersion":"",
+  "deviceId":"D6AB6C159B1FE1F8EF33109CDEE0D9AD",
+  "mcuid":"6A7EE4249F283C6A1EEE599CC3327232",
+  "context":"A3C64845E49049BF8EA4027B6828CEF1"
+}
+
+### 6. 设置设备状态
+POST https://auth.smyoo.com/api/gfriend/setdevicedata HTTP/1.1
+Content-Type: application/json; charset=UTF-8
+Host: auth.smyoo.com
+Cookie: BpeSessionId=HJY_67FC1EBDC2D9411B969830DFDE8D5266
+Content-Length: 224
+Expect: 100-continue
+Connection: Keep-Alive
+
+{
+  "appId":1314,
+  "endpointOS":1,
+  "clientVersion":"",
+  "deviceId":"D6AB6C159B1FE1F8EF33109CDEE0D9AD",
+  "mcuid":"6A7EE4249F283C6A1EEE599CC3327232",
+  "datatype":1,"datapoint":"{\"status\":0}",
+  "context":"A3C64845E49049BF8EA4027B6828CEF1"
+}
+
+### 7. 设置设备状态
+POST https://auth.smyoo.com/api/gfriend/setchanneldata HTTP/1.1
+Content-Type: application/json; charset=UTF-8
+Host: auth.smyoo.com
+Cookie: BpeSessionId=HJY_1EFF6317FA34417C8DD25BDDFF4F8933
+Content-Length: 236
+Expect: 100-continue
+Connection: Keep-Alive
+
+{
+  "appId":1314,
+  "endpointOS":1,
+  "clientVersion":"",
+  "deviceId":"D6AB6C159B1FE1F8EF33109CDEE0D9AD",
+  "mcuid":"517A181B179C5A44E212834ED84389B5",
+  "datatype":1,"datapoint":"{\"index\":1,\"status\":1}",
+  "context":"A3C64845E49049BF8EA4027B6828CEF1"
+}
+
+### 8. 获取设备信息
+POST https://auth.smyoo.com/api/gfriend/getmcuinfo HTTP/1.1
+Content-Type: application/json; charset=UTF-8
+Host: auth.smyoo.com
+Cookie: BpeSessionId=HJY_67FC1EBDC2D9411B969830DFDE8D5266
+Content-Length: 182
+Expect: 100-continue
+Connection: Keep-Alive
+
+{
+  "appId":1314,
+  "endpointOS":1,
+  "clientVersion":"",
+  "deviceId":"D6AB6C159B1FE1F8EF33109CDEE0D9AD",
+  "mcuid":"6A7EE4249F283C6A1EEE599CC3327232",
+  "context":"A3C64845E49049BF8EA4027B6828CEF1"
+}

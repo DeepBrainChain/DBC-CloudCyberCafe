@@ -5,6 +5,8 @@ import pandas as pd
 # import dash_daq as daq
 import os
 import re
+import json
+
 import global_config
 import lvm2
 import iscsi
@@ -15,7 +17,10 @@ import util
 import rpc_handler
 from threading import Thread
 
+from smyoo import Smyoo
+
 global_config._init()
+smyoo = Smyoo()
 
 # external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 # external_stylesheets = ['./style.css']
@@ -431,8 +436,24 @@ app.layout = html.Div([
                         value=global_config.get_value('iscsi_setting')['iscsi_target_prefix'],
                         persistence=True, style={'width':200}),
                 ], style={'display': 'flex', 'flex-direction': 'row'}),
-                html.Br(),
-                html.Div(id='operate-iscsi-setting-state')
+                html.Div(id='operate-iscsi-setting-state'),
+                html.H2('Smyoo'),
+                html.Div(children=[
+                    html.Label('phone number: '),
+                    html.Label(style={'width':10}),
+                    dcc.Input(id='smyoo-phone-input', type='tel', debounce=True,
+                        value=global_config.get_cache('smyoo_phone',default=''),
+                        placeholder='input type telphone number',
+                        persistence=True),
+                    html.Label(style={'width':10}),
+                    html.Label('password '),
+                    html.Label(style={'width':10}),
+                    dcc.Input(id='smyoo-password-input', type='password', debounce=True,
+                        value=global_config.get_cache('smyoo_password',default=''),
+                        placeholder='input type password',
+                        persistence=True),
+                    html.Div(id='operate-smyoo-state'),
+                ], style={'display': 'flex', 'flex-direction': 'row'}),
             ], style={'padding': 10, 'flex': 1})
         ])
     ], style=tabs_styles),
@@ -510,6 +531,56 @@ def remove_snapshot_storage_of_host(mac_addr):
     boot_menu = global_config.get_value('boot_menu')
     for boot_item in boot_menu['name']:
         remove_snapshot_storage_item_of_host(mac_addr, boot_item)
+
+def update_smyoo_devices_info():
+    bpeSessionId = global_config.get_cache('smyoo_session', default='')
+    if len(bpeSessionId) == 0:
+        return 1, 'Smyoo session of cookie is None'
+    updateTime, resultMsg = smyoo.statusChanged(bpeSessionId)
+    if updateTime is None:
+        return 1, resultMsg
+    updateTimeCache = global_config.get_cache('smyoo_updatetime', default='')
+    if updateTime != updateTimeCache:
+        global_config.set_cache('smyoo_updatetime', updateTime)
+        devices, resultMsg = smyoo.queryDevices(bpeSessionId)
+        if devices is None:
+            return 1, resultMsg
+        global_config.set_cache('smyoo_devices', json.dumps(devices))
+    return 0, 'success'
+
+def get_smyoo_host_mcuid(hostname):
+    devicesContent = global_config.get_cache('smyoo_devices',default='')
+    if len(devicesContent) == 0:
+        return None
+    try:
+        devices = json.loads(devicesContent)
+        for device in devices:
+            if device['mcuname'] == hostname:
+                return device['mcuid']
+    except:
+        print('get smyoo host mcuid failed')
+    return None
+
+def smyoo_host_power_control(op,hostname=None, ipaddr=None, updatedevices=False):
+    if updatedevices:
+        result_code, result_message = update_smyoo_devices_info()
+        if result_code != 0:
+            return result_code, result_message
+    bpeSessionId = global_config.get_cache('smyoo_session', default='')
+    if len(bpeSessionId) == 0:
+        return 1, 'Smyoo session of cookie is None'
+    if hostname is None and ipaddr:
+        hosts_data = global_config.get_value('hosts')
+        if ipaddr in hosts_data['ip']:
+            index_num = hosts_data['ip'].index(ipaddr)
+            hostname = hosts_data['host_name'][index_num]
+    if hostname is None:
+        return 1, 'Cannot find host name'
+    mcuid = get_smyoo_host_mcuid(hostname)
+    if mcuid is None:
+        return 1, 'Can not get smyoo mcuid of host'
+    result_code, result_message = smyoo.powerControl(bpeSessionId, mcuid, op)
+    return result_code, result_message
 
 @app.callback(
     Output('host-name-input', 'value'),
@@ -646,12 +717,20 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
         if selected_rows is None or len(selected_rows) == 0:
             return df_hosts.to_dict('records'), 'selected none', no_update
         else:
-            print(f'power on item {selected_rows}')
+            for index_num in selected_rows:
+                result_code, result_message = smyoo_host_power_control(
+                    1, hostname = hosts_data['host_name'][index_num],
+                    updatedevices = True)
+                return no_update, result_message if result_code != 0 else '', no_update
     elif trigger_id == 'power-off-button':
         if selected_rows is None or len(selected_rows) == 0:
             return df_hosts.to_dict('records'), 'selected none', no_update
         else:
-            print(f'power off item {selected_rows}')
+            for index_num in selected_rows:
+                result_code, result_message = smyoo_host_power_control(
+                    0, hostname = hosts_data['host_name'][index_num],
+                    updatedevices = True)
+                return no_update, result_message if result_code != 0 else '', no_update
     elif trigger_id == 'reset-host-image':
         if selected_rows is None or len(selected_rows) == 0:
             return df_hosts.to_dict('records'), 'selected none', no_update
@@ -669,28 +748,49 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
         result_message = 'restart dhcp service failed' if result_code != 0 else ''
         return df_hosts.to_dict('records'), result_message, no_update
     elif trigger_id == 'thrift-network-notify':
-        if thrift_request_data is not None and thrift_request_data != "":
-            request_list = thrift_request_data.split(',')
-            if len(request_list) < 3:
-                global_config.set_cache('result', 'invalid request')
-            elif request_list[1] in hosts_data['ip']:
-                index_num = hosts_data['ip'].index(request_list[1])
-                boot_menu_list = global_config.get_value('boot_menu')
-                if hosts_data['default_menu'][index_num] == request_list[2]:
-                    global_config.set_cache('result', 'boot menu is same as request')
-                elif request_list[2] in boot_menu_list['name']:
-                    hosts_data['default_menu'][index_num] = request_list[2]
-                    update_ipxe_cfg(hosts_data['mac'][index_num], request_list[2],
-                        hosts_data['super_tube'][index_num])
-                    global_config.set_cache('result', 'success')
-                    global_config.set_value('hosts', hosts_data)
-                    df_hosts = pd.DataFrame.from_dict(hosts_data)
-                    global_config.write_config_file()
-                    return df_hosts.to_dict('records'), no_update, no_update
+        if thrift_request_data and len(thrift_request_data) > 0:
+            request = eval(thrift_request_data)
+            response = {'code':1,'message':'unknown error'}
+            if request['type'] == 'SET_BOOT_MENU':
+                hostip = global_config.find_host_ip(
+                    hostname=request['host'],ip=request['host'])
+                if hostip:
+                    index_num = hosts_data['ip'].index(hostip)
+                    boot_menu_list = global_config.get_value('boot_menu')
+                    if request['menu'] in boot_menu_list['name']:
+                        hosts_data['default_menu'][index_num] = request['menu']
+                        hosts_data['super_tube'][index_num] = request['superTube']
+                        update_ipxe_cfg(hosts_data['mac'][index_num],
+                            request['menu'], request['superTube'])
+                        global_config.set_value('hosts', hosts_data)
+                        df_hosts = pd.DataFrame.from_dict(hosts_data)
+                        global_config.write_config_file()
+                        response['code'] = 0
+                        response['message'] = 'success'
+                        global_config.set_cache('result', repr(response), expire=3)
+                        return df_hosts.to_dict('records'), no_update, no_update
+                    else:
+                        response['message'] = 'boot menu not existed'
                 else:
-                    global_config.set_cache('result', 'boot menu not existed')
+                    response['message'] = 'invalid request host'
+            elif request['type'] == 'SET_SMYOO_DEVICE_POWER':
+                hostname = global_config.find_host_name(
+                    hostname=request['host'],ip=request['host'])
+                if hostname:
+                    if request['status'] in [0,1]:
+                        result_code, result_message = smyoo_host_power_control(
+                            request['status'], hostname=hostname)
+                        response['code'] = result_code
+                        response['message'] = result_message
+                        global_config.set_cache('result', repr(response), expire=3)
+                        return no_update, no_update, no_update
+                    else:
+                        response['message'] = 'invalid power status'
+                else:
+                    response['message'] = 'invalid request host'
             else:
-                global_config.set_cache('result', 'invalid request host')
+                response['message'] = 'unsupported message type'
+            global_config.set_cache('result', repr(response), expire=3)
         # return no_update, no_update, no_update
         raise PreventUpdate
 
@@ -704,8 +804,8 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
     Input('thrift-interval', 'n_intervals')
 )
 def interval_update(n_intervals):
-    request_cache = global_config.get_cache('request')
-    if request_cache != "":
+    request_cache = global_config.get_cache('request', default="")
+    if len(request_cache) > 0:
         global_config.delete_cache('request')
         print('get thrift request in diskcache: ', request_cache)
         return request_cache
@@ -1110,6 +1210,30 @@ def edit_iscsi_setting(initiator_iqn, iscsi_target_prefix):
     iscsi_setting['iscsi_target_prefix'] = iscsi_target_prefix
     global_config.set_value('iscsi_setting', iscsi_setting)
     global_config.write_config_file()
+    return ''
+
+@app.callback(
+    Output('operate-smyoo-state', 'children'),
+    Input('smyoo-phone-input', 'value'),
+    Input('smyoo-password-input', 'value')
+)
+def edit_smyoo_setting(phone, password):
+    print('phone:', phone, ', password:', password)
+    changed = False
+    if phone and len(phone) > 0 \
+        and phone != global_config.get_cache('smyoo_phone',default=''):
+        global_config.set_cache('smyoo_phone', phone)
+        changed = True
+    if password and len(password) > 0 \
+        and password != global_config.get_cache('smyoo_password',default=''):
+        global_config.set_cache('smyoo_password', password)
+        changed = True
+    if changed:
+        bpeSessionId, resultMsg = smyoo.login(phone, password)
+        if bpeSessionId is None:
+            global_config.delete_cache('smyoo_session')
+            return resultMsg
+        global_config.set_cache('smyoo_session', bpeSessionId, expire=3600*24)
     return ''
 
 if __name__ == '__main__':
