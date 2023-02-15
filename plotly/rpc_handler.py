@@ -13,26 +13,15 @@ from thrift.TSerialization import serialize, deserialize
 from thrift.server import TServer, TNonblockingServer
 
 import time
+
 import global_config
+from error_code import ErrorCode
 
-def encrypt(message, key):
-  dec = bytearray(message)
-  for index, item in enumerate(dec):
-    dec[index] = item ^ key
-  return dec.decode(encoding='utf-8',errors='strict')
+def thriftToString(ts):
+  return serialize(ts).decode('utf-8')
 
-def decrypt(message, key):
-  dec = bytearray(message)
-  for index, item in enumerate(dec):
-    dec[index] = item ^ key
-  return dec.decode(encoding='utf-8',errors='strict')
-
-def thriftToString(ts, key = 0):
-  return encrypt(serialize(ts), key)
-
-def stringToThrift(str, ts, key = 0):
-  dec = decrypt(str.encode('utf-8'), key);
-  return deserialize(ts, dec.encode('utf-8'))
+def stringToThrift(str, ts):
+  return deserialize(ts, str.encode('utf-8'))
 
 class OccHandler:
   def __init__(self):
@@ -47,26 +36,36 @@ class OccHandler:
     transport = TTransport.TBufferedTransport(transport)
     protocol = TBinaryProtocol.TBinaryProtocol(transport)
     client = Preset.Client(protocol)
-    transport.open()
-    pingRes = client.ping()
-    print(f'ping {host}:{port} return {pingRes}')
+    try:
+      transport.open()
+      pingRes = client.ping()
+      print(f'ping {host}:{port} return {pingRes}')
+    except:
+      return ResultStruct(
+        code=ErrorCode.CONNECT_FAILED.value,
+        message='connect failed')
     try:
       rs = client.handleMessage(message)
       print(f'handleMessage return ResultStruct{{{rs.code}, {rs.message}}}')
     except InvalidMessageType as e:
       print(f'InvalidMessageType: {e}')
-      rs.code = 1
+      rs.code = ErrorCode.UNKNOWN_MESSAGE_TYPE.value
       rs.message = f'InvalidMessageType: {e}'
     except Thrift.TException as tx:
       print(f'exception: {tx.message}')
-      rs.code = 1
+      rs.code = ErrorCode.EXCEPTION_OCCURRED.value
       rs.message = f'exception: {tx.message}'
     transport.close()
     return rs
 
   def handleMessage(self, msg):
     ret = ResultStruct()
-    if msg.type == MessageType.PING:
+    mtl = list(MessageType._VALUES_TO_NAMES.keys())
+    if msg.type not in mtl:
+      ret.code = ErrorCode.UNKNOWN_MESSAGE_TYPE.value
+      ret.message = 'unknown message type'
+      print('handle unknown message type')
+    elif msg.type == MessageType.PING:
       ret.code = 0
       ret.message = 'pong'
       print('handle ping message')
@@ -74,12 +73,12 @@ class OccHandler:
       boot_menu = global_config.get_value('boot_menu')
       bml = BootMenuList(menus=list(boot_menu['name']))
       ret.code = 0
-      ret.message = thriftToString(bml, MessageType.GET_BOOT_MENU)
+      ret.message = thriftToString(bml)
       # ret.message = 'success'
       print('handle get boot menu message')
     elif msg.type == MessageType.SET_BOOT_MENU:
       bm = BootMenu()
-      bm = stringToThrift(msg.body, bm, MessageType.SET_BOOT_MENU)
+      bm = stringToThrift(msg.body, bm)
       print(f'setBootmenu: {bm}')
       request = {
         'type':'SET_BOOT_MENU',
@@ -101,7 +100,7 @@ class OccHandler:
         ret.code = response['code']
         ret.message = response['message']
       else:
-        ret.code = 1
+        ret.code = ErrorCode.TIMEOUT.value
         ret.message = 'timeout error'
       print('handle set boot menu message')
     elif msg.type == MessageType.GET_SMYOO_DEVICE_INFO:
@@ -114,17 +113,17 @@ class OccHandler:
             note=device['note'], isonline=device['isonline'],
             power=device['power'], mcuid=device['mcuid'])
           ret.code = 0
-          ret.message = thriftToString(info, MessageType.GET_SMYOO_DEVICE_INFO)
+          ret.message = thriftToString(info)
         else:
-          ret = 1
+          ret.code = ErrorCode.SMYOO_HOST_NOT_EXISTED.value
           ret.message= 'smyoo device not existed'
       else:
-        ret.code = 1
+        ret.code = ErrorCode.UNKNOWN_HOST.value
         ret.message = 'can not find smyoo mcuname of host'
       print('handle get smyoo device info message')
     elif msg.type == MessageType.SET_SMYOO_DEVICE_POWER:
       sdp = SmyooDevicePowerData()
-      sdp = stringToThrift(msg.body, sdp, MessageType.SET_SMYOO_DEVICE_POWER)
+      sdp = stringToThrift(msg.body, sdp)
       print(f'setSmyooDevicePower: {sdp}')
       request = {
         'type':'SET_SMYOO_DEVICE_POWER',
@@ -147,12 +146,16 @@ class OccHandler:
         ret.code = response['code']
         ret.message = response['message']
       else:
-        ret.code = 1
+        ret.code = ErrorCode.TIMEOUT.value
         ret.message = 'timeout error'
       print('handle set smyoo device power message')
     else:
       hostip = global_config.find_host_ip(hostname=msg.host,ip=msg.host)
-      ret = sendMsg(msg, hostip)
+      if hostip:
+        ret = self.sendMsg(msg, hostip)
+      else:
+        ret.code = ErrorCode.UNKNOWN_HOST.value
+        ret.message = 'unknown host'
     return ret
 
 def thrift_thread():

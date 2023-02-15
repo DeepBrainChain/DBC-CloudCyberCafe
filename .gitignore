@@ -1,4 +1,12 @@
 *__pycache__*
+
+# plotly dashboard
+plotly/config.json
+plotly/cache/
+plotly/build/
+plotly/dist/
+plotly/*.spec
+
 netboot/
 winpe/
 

@@ -74,22 +74,22 @@ nginx.conf
 isc-dhcp-server
 ```
 option client-architecture code 93 = unsigned integer 16;
-subnet 192.168.119.0 netmask 255.255.255.0 {
-    range 192.168.119.100 192.168.119.200;
+subnet 192.168.1.0 netmask 255.255.255.0 {
+    range 192.168.1.100 192.168.1.200;
     option subnet-mask 255.255.255.0;
-    option routers 192.168.119.1;
+    option routers 192.168.1.159;
     option domain-name-servers 223.5.5.5;
-    option broadcast-address 192.168.119.255;
+    option broadcast-address 192.168.1.255;
     if exists user-class and option user-class = "iPXE" {
-        filename "http://192.168.119.2:8080/ipxe/boot.ipxe";
+        filename "http://192.168.1.159:8080/ipxe/boot.ipxe";
     } elsif option client-architecture = 00:00 {
         filename "undionly.kpxe";
     } else {
         filename "ipxe.efi";
     }
-    next-server 192.168.119.2;
+    next-server 192.168.1.159;
 }
-host host001 {hardware ethernet 88:AE:DD:05:08:FA; fixed-address 192.168.119.101;}
+host host001 {hardware ethernet 88:AE:DD:05:08:FA; fixed-address 192.168.1.101;}
 ```
 
 dnsmasq
@@ -100,19 +100,25 @@ tftp-root=/srv/tftp
 
 dhcp-option=option:router,192.168.1.1
 dhcp-option=option:dns-server,223.5.5.5
-dhcp-match=set:iPXE,option:user-class,"iPXE"
+# dhcp-match=set:ipxe,option:user-class,"iPXE"
+dhcp-match=set:ipxe,175
 dhcp-match=set:bios,option:client-arch,0
 
-dhcp-boot=tag:bios,undionly.kpxe,,192.168.1.159
-dhcp-boot=tag:!bios,ipxe.efi,,192.168.1.159
-dhcp-boot=net:iPXE,http://192.168.1.159:8080/ipxe/boot.ipxe,,192.168.1.159
+dhcp-boot=tag:!ipxe,tag:bios,undionly.kpxe,,192.168.1.159
+dhcp-boot=tag:!ipxe,tag:!bios,ipxe.efi,,192.168.1.159
+dhcp-boot=tag:ipxe,http://192.168.1.159:8080/ipxe/boot.ipxe,,192.168.1.159
 
 pxe-prompt="Booting from iPXE",1
 
+pxe-service=X86PC,"Boot to X86PC",undionly.kpxe,192.168.1.159
+pxe-service=X86-64_EFI,"Boot to X86-64_EFI",ipxe.efi,192.168.1.159
+pxe-service=BC_EFI,"Boot to BC_EFI",ipxe.efi,192.168.1.159
+
 interface=eno1
 dhcp-host=40:B0:76:7E:E2:31,asus,192.168.1.55
-dhcp-host=88:AE:DD:05:08:FA,host001,192.168.1.101
-dhcp-range=192.168.1.50,192.168.1.80,255.255.255.0,45m
+dhcp-host=88:AE:DD:05:08:FA,host001,192.168.1.56
+# dhcp-range=192.168.1.50,192.168.1.80,255.255.255.0,45m
+dhcp-range=192.168.1.50,proxy,255.255.255.0,45m
 ```
 
 - https://www.isc.org/kea/
@@ -143,3 +149,16 @@ dhcp-range=192.168.1.50,192.168.1.80,255.255.255.0,45m
 备注:
 1. 测试阶段请先使用纯系统和必要的驱动来测试，启动成功后再安装其他软件游戏进一步测试。
 2. 镜像的上传方式以后会优化，升级成热迁移或者进入WinPE使用磁盘精灵操作。
+
+## dashboard 打包
+
+```shell
+# 1. 需要安装 PyInstaller;
+pip3 install pyinstaller
+# 2. 请提前生成 thrift 协议文件;
+cd <代码目录>/preset/
+thrift --gen py preset.thrift
+# 3. 使用 PyInstaller 打包命令。
+cd <代码目录>/plotly/
+python3 -m PyInstaller -F -n occ home.py -p ../preset/gen-py/
+```

@@ -4,6 +4,7 @@
 #include <thrift/transport/TBufferTransports.h>
 
 #include "cross_platform_func.h"
+#include "error_code.h"
 
 using namespace ::occ;
 
@@ -23,10 +24,10 @@ static std::string decrypt(const std::string& buff, int key) {
   return enc;
 }
 
-template<typename ThriftStruct>
-std::string ThriftToString(const ThriftStruct& ts, int key = 0) {
+template <typename ThriftStruct>
+std::string ThriftToString(const ThriftStruct& ts) {
   using namespace apache::thrift::transport;  // NOLINT
-  using namespace apache::thrift::protocol;  // NOLINT
+  using namespace apache::thrift::protocol;   // NOLINT
 
   std::shared_ptr<TMemoryBuffer> buffer = std::make_shared<TMemoryBuffer>();
   std::shared_ptr<TTransport> trans(buffer);
@@ -37,17 +38,18 @@ std::string ThriftToString(const ThriftStruct& ts, int key = 0) {
   uint8_t* buf;
   uint32_t size;
   buffer->getBuffer(&buf, &size);
-  return encrypt(std::string((char*)buf, (unsigned int)size), key);  // NOLINT
+  // return encrypt(std::string((char*)buf, (unsigned int)size), key);
+  return std::string((char*)buf, (unsigned int)size);  // NOLINT
 }
 
-template<typename ThriftStruct>
-bool StringToThrift(const std::string& buff, ThriftStruct& ts, int key = 0) {
-  std::string dec = decrypt(buff, key);
+template <typename ThriftStruct>
+bool StringToThrift(const std::string& buff, ThriftStruct& ts) {
+  // std::string dec = decrypt(buff, key);
   using namespace apache::thrift::transport;  // NOLINT
-  using namespace apache::thrift::protocol;  // NOLINT
+  using namespace apache::thrift::protocol;   // NOLINT
   try {
     std::shared_ptr<TMemoryBuffer> buffer = std::make_shared<TMemoryBuffer>();
-    buffer->write((const uint8_t*)dec.data(), dec.size());
+    buffer->write((const uint8_t*)buff.data(), buff.size());
     std::shared_ptr<TTransport> trans(buffer);
     TBinaryProtocol protocol(trans);
     ts.read(&protocol);
@@ -71,27 +73,29 @@ void PresetHandler::ping(std::string& _return) {
 void PresetHandler::handleMessage(ResultStruct& _return, const Message& msg) {
   // Your implementation goes here
   // printf("handleMessage\n");
-  switch(msg.type) {
+  _return.code = ErrorCode::UNKNOWN_ERROR;
+  _return.message = u8"unknown error";
+  switch (msg.type) {
     case MessageType::PING:
-      _return.code = 0;
+      _return.code = ErrorCode::SUCCESS;
       _return.message = u8"pong";
       printf("handle ping message\n");
       break;
     case MessageType::GET_HOST_INFO:
-      _return.code = 0;
-      _return.message = ThriftToString(info_, msg.type);
+      _return.code = ErrorCode::SUCCESS;
+      _return.message = ThriftToString(info_);
       printf("handle get host info message\n");
       break;
     case MessageType::SET_HOST_INFO:
       {
         HostInfo info;
-        if (StringToThrift(msg.body, info, msg.type)) {
+        if (StringToThrift(msg.body, info)) {
           info_.hostName = info.hostName;
           info_.ipAddress = info.ipAddress;
-          _return.code = 0;
+          _return.code = ErrorCode::SUCCESS;
           _return.message = u8"success";
         } else {
-          _return.code = 1;
+          _return.code = ErrorCode::INVALID_MESSAGE_BODY;
           _return.message = u8"invalid message body";
         }
       }
@@ -101,11 +105,12 @@ void PresetHandler::handleMessage(ResultStruct& _return, const Message& msg) {
       {
         std::vector<std::string> users;
         _return.code = enumUserName(users);
-        if (_return.code == 0) {
+        if (_return.code == ErrorCode::SUCCESS) {
           UserList ul;
           ul.__set_users(users);
-          _return.message = ThriftToString(ul, msg.type);
+          _return.message = ThriftToString(ul);
         } else {
+          _return.code = ErrorCode::GET_USER_LIST_FAILED;
           _return.message = u8"failed to get user list";
         }
       }
@@ -114,14 +119,16 @@ void PresetHandler::handleMessage(ResultStruct& _return, const Message& msg) {
     case MessageType::SET_USER_PASSWORD:
       {
         UserPassword up;
-        if (StringToThrift(msg.body, up, msg.type)) {
+        if (StringToThrift(msg.body, up)) {
           _return.code = setUserPassword(up.userName, up.password);
-          if (_return.code == 0)
+          if (_return.code == ErrorCode::SUCCESS) {
             _return.message = u8"success";
-          else
+          } else {
             _return.message = getErrorMessage(_return.code);
+            _return.code = ErrorCode::SET_USER_PASSWORD_FAILED;
+          }
         } else {
-          _return.code = 1;
+          _return.code = ErrorCode::INVALID_MESSAGE_BODY;
           _return.message = u8"invalid message body";
         }
       }
@@ -134,6 +141,4 @@ void PresetHandler::handleMessage(ResultStruct& _return, const Message& msg) {
       printf("handle invalid message\n");
       throw io;
   }
-  // _return.code = 0;
-  // _return.message = "success";
 }

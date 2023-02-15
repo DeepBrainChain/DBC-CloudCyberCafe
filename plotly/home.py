@@ -18,6 +18,7 @@ import rpc_handler
 from threading import Thread
 
 from smyoo import Smyoo
+from error_code import ErrorCode
 
 global_config._init()
 smyoo = Smyoo()
@@ -532,6 +533,15 @@ def remove_snapshot_storage_of_host(mac_addr):
     for boot_item in boot_menu['name']:
         remove_snapshot_storage_item_of_host(mac_addr, boot_item)
 
+def update_smyoo_session(phone, password):
+    if len(phone) == 0 or len(password) == 0:
+        return 1, 'invalid phone or password'
+    bpeSessionId, resultMsg = smyoo.login(phone, password)
+    if bpeSessionId is None:
+        return 1, resultMsg
+    global_config.set_cache('smyoo_session', bpeSessionId, expire=3600*24)
+    return 0, bpeSessionId
+
 def update_smyoo_devices_info():
     bpeSessionId = global_config.get_cache('smyoo_session', default='')
     if len(bpeSessionId) == 0:
@@ -541,10 +551,10 @@ def update_smyoo_devices_info():
         return 1, resultMsg
     updateTimeCache = global_config.get_cache('smyoo_updatetime', default='')
     if updateTime != updateTimeCache:
-        global_config.set_cache('smyoo_updatetime', updateTime)
         devices, resultMsg = smyoo.queryDevices(bpeSessionId)
         if devices is None:
             return 1, resultMsg
+        global_config.set_cache('smyoo_updatetime', updateTime)
         global_config.set_cache('smyoo_devices', json.dumps(devices))
     return 0, 'success'
 
@@ -562,13 +572,18 @@ def get_smyoo_host_mcuid(hostname):
     return None
 
 def smyoo_host_power_control(op,hostname=None, ipaddr=None, updatedevices=False):
+    bpeSessionId = global_config.get_cache('smyoo_session', default=None)
+    if bpeSessionId is None:
+        result_code, result_message = update_smyoo_session(
+            global_config.get_cache('smyoo_phone',default=''),
+            global_config.get_cache('smyoo_password',default=''))
+        if result_code != 0:
+            return result_code, result_message
+        bpeSessionId = result_message
     if updatedevices:
         result_code, result_message = update_smyoo_devices_info()
         if result_code != 0:
             return result_code, result_message
-    bpeSessionId = global_config.get_cache('smyoo_session', default='')
-    if len(bpeSessionId) == 0:
-        return 1, 'Smyoo session of cookie is None'
     if hostname is None and ipaddr:
         hosts_data = global_config.get_value('hosts')
         if ipaddr in hosts_data['ip']:
@@ -750,7 +765,10 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
     elif trigger_id == 'thrift-network-notify':
         if thrift_request_data and len(thrift_request_data) > 0:
             request = eval(thrift_request_data)
-            response = {'code':1,'message':'unknown error'}
+            response = {
+                'code': ErrorCode.UNKNOWN_ERROR.value,
+                'message': 'unknown error when dealing with plotly network notify'
+            }
             if request['type'] == 'SET_BOOT_MENU':
                 hostip = global_config.find_host_ip(
                     hostname=request['host'],ip=request['host'])
@@ -770,8 +788,10 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
                         global_config.set_cache('result', repr(response), expire=3)
                         return df_hosts.to_dict('records'), no_update, no_update
                     else:
+                        response['code'] = ErrorCode.PLOTLY_BOOT_MENU_NOT_EXISTED.value
                         response['message'] = 'boot menu not existed'
                 else:
+                    response['code'] = ErrorCode.UNKNOWN_HOST.value
                     response['message'] = 'invalid request host'
             elif request['type'] == 'SET_SMYOO_DEVICE_POWER':
                 hostname = global_config.find_host_name(
@@ -780,15 +800,19 @@ def edit_hosts_table(n_clicks1, n_clicks2, n_clicks3, n_clicks4,  n_clicks5,
                     if request['status'] in [0,1]:
                         result_code, result_message = smyoo_host_power_control(
                             request['status'], hostname=hostname)
-                        response['code'] = result_code
+                        response['code'] = result_code if result_code != 1 else \
+                            ErrorCode.PLOTLY_SET_SMYOO_HOST_POWER_FAILED.value
                         response['message'] = result_message
                         global_config.set_cache('result', repr(response), expire=3)
                         return no_update, no_update, no_update
                     else:
+                        response['code'] = ErrorCode.PLOTLY_INVALID_SMYOO_POWER_STATUS.value
                         response['message'] = 'invalid power status'
                 else:
+                    response['code'] = ErrorCode.UNKNOWN_HOST.value
                     response['message'] = 'invalid request host'
             else:
+                response['code'] = ErrorCode.PLOTLY_UNKNOWN_NOTIFY_TYPE.value
                 response['message'] = 'unsupported message type'
             global_config.set_cache('result', repr(response), expire=3)
         # return no_update, no_update, no_update
@@ -1218,7 +1242,7 @@ def edit_iscsi_setting(initiator_iqn, iscsi_target_prefix):
     Input('smyoo-password-input', 'value')
 )
 def edit_smyoo_setting(phone, password):
-    print('phone:', phone, ', password:', password)
+    # print('phone:', phone, ', password:', password)
     changed = False
     if phone and len(phone) > 0 \
         and phone != global_config.get_cache('smyoo_phone',default=''):
@@ -1229,16 +1253,15 @@ def edit_smyoo_setting(phone, password):
         global_config.set_cache('smyoo_password', password)
         changed = True
     if changed:
-        bpeSessionId, resultMsg = smyoo.login(phone, password)
-        if bpeSessionId is None:
+        result_code, result_message = update_smyoo_session(phone, password)
+        if result_code != 0:
             global_config.delete_cache('smyoo_session')
-            return resultMsg
-        global_config.set_cache('smyoo_session', bpeSessionId, expire=3600*24)
+            return result_message
     return ''
 
 if __name__ == '__main__':
     tt = Thread(target=rpc_handler.thrift_thread)
     tt.start()
     # app.run_server(debug=True)
-    app.run_server(debug=True, host='0.0.0.0')
+    app.run_server(debug=False, host='0.0.0.0')
     print("done!")

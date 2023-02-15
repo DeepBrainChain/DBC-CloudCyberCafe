@@ -24,7 +24,7 @@ Windows 打开 Developer Command Prompt for VS 2019
 
 ```
 cmake -G "Visual Studio 16 2019" -A Win32 . -B "build32"
-cmake -G "Visual Studio 16 2019" -A x64 .. -B "build64"
+cmake -G "Visual Studio 16 2019" -A x64 . -B "build64"
 cmake --build build32 --config Release
 cmake --build build64 --config Release
 ```

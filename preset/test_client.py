@@ -4,7 +4,7 @@ sys.path.append('./gen-py')
 from preset import Preset
 from preset.ttypes import *
 from preset.constants import *
- 
+
 from thrift import Thrift
 from thrift.transport import TSocket
 from thrift.transport import TTransport
@@ -30,30 +30,18 @@ def decrypt(message, key):
         dec[index] = item ^ key
     return dec.decode(encoding='utf-8',errors='strict')
 
-# deserialize need struct and bytes
-def printHostInfo(body):
-    info = HostInfo()
-    # tmb = TMemoryBuffer(body)
-    # tbp = TBinaryProtocol(tmb)
-    # info.read(tbp)
-    info = deserialize(info, body)
-    print(f'hostName:{info.hostName},ipAddress:{info.ipAddress}')
+# def thriftToString(ts, key = 0):
+#     return encrypt(serialize(ts), key)
 
-# serialize return type <bytes>
-def makeHostInfoBody(hostName, ipAddress):
-    info = HostInfo(hostName,ipAddress)
-    # tmb = TMemoryBuffer()
-    # tbp = TBinaryProtocol(tmb)
-    # info.write(tbp)
-    # return tmb.getvalue()
-    return serialize(info).decode('utf-8')
+def thriftToString(ts):
+    return serialize(ts).decode('utf-8')
 
-def thriftToString(ts, key = 0):
-    return encrypt(serialize(ts), key)
+# def stringToThrift(str, ts, key = 0):
+#     dec = decrypt(str.encode('utf-8'), key);
+#     return deserialize(ts, dec.encode('utf-8'))
 
-def stringToThrift(str, ts, key = 0):
-    dec = decrypt(str.encode('utf-8'), key);
-    return deserialize(ts, dec.encode('utf-8'))
+def stringToThrift(str, ts):
+    return deserialize(ts, str.encode('utf-8'))
 
 def main():
     # Make socket
@@ -77,50 +65,53 @@ def main():
 
     pingMsg = Message(version=0x01000001,type=MessageType.PING,body='')
     rs = client.handleMessage(pingMsg)
-    print(f'getHostInfo return ResultStruct{{{rs.code}, {rs.message}}}')
+    print(f'pingMsg return ResultStruct{{{rs.code}, {rs.message}}}')
 
     getHostInfoMsg = Message(
         version=0x01000001,
         type=MessageType.GET_HOST_INFO,
         body='')
     rs = client.handleMessage(getHostInfoMsg)
-    print(f'getHostInfo return ResultStruct{{{rs.code}, {rs.message}}}')
     if rs.code == 0:
         info = HostInfo()
-        info = stringToThrift(rs.message, info, MessageType.GET_HOST_INFO)
-        print(f'hostName:{info.hostName}, ipAddress:{info.ipAddress}')
+        info = stringToThrift(rs.message, info)
+        print(f'getHostInfo return -> {info}')
+    else:
+        print(f'getHostInfo return ResultStruct{{{rs.code}, {rs.message}}}')
 
     setInfo = HostInfo('jerry','192.168.1.111')
     setHostInfoMsg = Message(
         version=0x01000001,
         type=MessageType.SET_HOST_INFO,
-        body=thriftToString(setInfo, MessageType.SET_HOST_INFO))
+        body=thriftToString(setInfo))
     rs = client.handleMessage(setHostInfoMsg)
     print(f'setHostInfo return ResultStruct{{{rs.code}, {rs.message}}}')
 
     rs = client.handleMessage(getHostInfoMsg)
-    print(f'getHostInfo return ResultStruct{{{rs.code}, {rs.message}}}')
     if rs.code == 0:
         info = HostInfo()
-        info = stringToThrift(rs.message, info, MessageType.GET_HOST_INFO)
-        print(f'hostName:{info.hostName}, ipAddress:{info.ipAddress}')
+        info = stringToThrift(rs.message, info)
+        print(f'getHostInfo return -> {info}')
+    else:
+        print(f'getHostInfo return ResultStruct{{{rs.code}, {rs.message}}}')
 
     getUserListMsg = Message(
         version=0x01000001,
         type=MessageType.GET_USER_LIST,
         body='')
     rs = client.handleMessage(getUserListMsg)
-    print(f'getUserList return ResultStruct{{{rs.code}, {rs.message}}}')
     if rs.code == 0:
         ul = UserList()
-        ul = stringToThrift(rs.message, ul, MessageType.GET_USER_LIST)
-        print(f'user list: {ul.users}')
+        ul = stringToThrift(rs.message, ul)
+        print(f'getUserList return -> {ul}')
+    else:
+        print(f'getUserList return ResultStruct{{{rs.code}, {rs.message}}}')
 
-    up = UserPassword('dbc', 'dbc')
+    up = UserPassword('dbc', 'dbtu2017')
     setUserPasswordMsg = Message(
         version=0x01000001,
         type=MessageType.SET_USER_PASSWORD,
-        body=thriftToString(up, MessageType.SET_USER_PASSWORD))
+        body=thriftToString(up))
     rs = client.handleMessage(setUserPasswordMsg)
     print(f'setUserPassword return ResultStruct{{{rs.code}, {rs.message}}}')
 

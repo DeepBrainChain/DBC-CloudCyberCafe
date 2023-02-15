@@ -30,10 +30,10 @@ static std::string decrypt(const std::string& buff, int key) {
   return enc;
 }
 
-template<typename ThriftStruct>
-std::string ThriftToString(const ThriftStruct& ts, int key = 0) {
+template <typename ThriftStruct>
+std::string ThriftToString(const ThriftStruct& ts) {
   using namespace apache::thrift::transport;  // NOLINT
-  using namespace apache::thrift::protocol;  // NOLINT
+  using namespace apache::thrift::protocol;   // NOLINT
 
   std::shared_ptr<TMemoryBuffer> buffer = std::make_shared<TMemoryBuffer>();
   std::shared_ptr<TTransport> trans(buffer);
@@ -44,17 +44,18 @@ std::string ThriftToString(const ThriftStruct& ts, int key = 0) {
   uint8_t* buf;
   uint32_t size;
   buffer->getBuffer(&buf, &size);
-  return encrypt(std::string((char*)buf, (unsigned int)size), key);  // NOLINT
+  // return encrypt(std::string((char*)buf, (unsigned int)size), key);
+  return std::string((char*)buf, (unsigned int)size);  // NOLINT
 }
 
-template<typename ThriftStruct>
-bool StringToThrift(const std::string& buff, ThriftStruct& ts, int key = 0) {
-  std::string dec = decrypt(buff, key);
+template <typename ThriftStruct>
+bool StringToThrift(const std::string& buff, ThriftStruct& ts) {
+  // std::string dec = decrypt(buff, key);
   using namespace apache::thrift::transport;  // NOLINT
-  using namespace apache::thrift::protocol;  // NOLINT
+  using namespace apache::thrift::protocol;   // NOLINT
   try {
     std::shared_ptr<TMemoryBuffer> buffer = std::make_shared<TMemoryBuffer>();
-    buffer->write((const uint8_t*)dec.data(), dec.size());
+    buffer->write((const uint8_t*)buff.data(), buff.size());
     std::shared_ptr<TTransport> trans(buffer);
     TBinaryProtocol protocol(trans);
     ts.read(&protocol);
@@ -85,10 +86,12 @@ int main() {
     getHostInfoMsg.__set_type(MessageType::GET_HOST_INFO);
     getHostInfoMsg.__set_body("");
     client.handleMessage(rs, getHostInfoMsg);
-    cout << "getHostInfo return ResultStruct{" << rs.code << ", " << rs.message << "}" << endl;
     if (rs.code == 0) {
-      StringToThrift(rs.message, info, MessageType::GET_HOST_INFO);
-      printf("hostName:%s, ipAddress:%s\n", info.hostName.c_str(), info.ipAddress.c_str());
+      StringToThrift(rs.message, info);
+      printf("getHostInfo return -> HostInfo{hostName='%s', ipAddress='%s'}\n",
+        info.hostName.c_str(), info.ipAddress.c_str());
+    } else {
+      cout << "getHostInfo return ResultStruct{" << rs.code << ", " << rs.message << "}" << endl;
     }
 
     info.__set_hostName("jerry");
@@ -96,15 +99,17 @@ int main() {
     Message setHostInfoMsg;
     setHostInfoMsg.__set_version(0x01000001);
     setHostInfoMsg.__set_type(MessageType::SET_HOST_INFO);
-    setHostInfoMsg.__set_body(ThriftToString(info, MessageType::SET_HOST_INFO));
+    setHostInfoMsg.__set_body(ThriftToString(info));
     client.handleMessage(rs, setHostInfoMsg);
     cout << "setHostInfo return ResultStruct{" << rs.code << ", " << rs.message << "}" << endl;
 
     client.handleMessage(rs, getHostInfoMsg);
-    cout << "getHostInfo return ResultStruct{" << rs.code << ", " << rs.message << "}" << endl;
     if (rs.code == 0) {
-      StringToThrift(rs.message, info, MessageType::GET_HOST_INFO);
-      printf("hostName:%s, ipAddress:%s\n", info.hostName.c_str(), info.ipAddress.c_str());
+      StringToThrift(rs.message, info);
+      printf("getHostInfo return -> HostInfo{hostName='%s', ipAddress='%s'}\n",
+        info.hostName.c_str(), info.ipAddress.c_str());
+    } else {
+      cout << "getHostInfo return ResultStruct{" << rs.code << ", " << rs.message << "}" << endl;
     }
 
     Message getUserList;
@@ -112,24 +117,31 @@ int main() {
     getUserList.__set_type(MessageType::GET_USER_LIST);
     getHostInfoMsg.__set_body("");
     client.handleMessage(rs, getUserList);
-    cout << "getUserList return ResultStruct{" << rs.code << ", " << rs.message << "}" << endl;
     if (rs.code == 0) {
       UserList ul;
-      StringToThrift(rs.message, ul, MessageType::GET_USER_LIST);
-      cout << "userList:";
-      for (const auto& item : ul.users)
-        cout << "<" << item << ">";
-      cout << endl;
+      StringToThrift(rs.message, ul);
+      cout << "getUserList return -> UserList{users=[";
+      int count = 0;
+      for (const auto& item : ul.users) {
+        if (count++ != 0) cout << ",";
+        cout << "'" << item << "'";
+      }
+      cout << "]}" << endl;
+    } else {
+      cout << "getUserList return ResultStruct{" << rs.code << ", " << rs.message << "}" << endl;
     }
 
     UserPassword up;
     up.__set_userName("dbc");
-    up.__set_password("dbc");
+    up.__set_password("dbtu2017");
     Message setUserPassword;
     setUserPassword.__set_version(0x01000001);
     setUserPassword.__set_type(MessageType::SET_USER_PASSWORD);
-    setUserPassword.__set_body(ThriftToString(up, MessageType::SET_USER_PASSWORD));
+    setUserPassword.__set_body(ThriftToString(up));
     client.handleMessage(rs, setUserPassword);
+    // rs.message 若包含中文字符，在 Windows 上输出可能会乱码，因为 thrift 采用 UTF-8 编码。
+    // 修改方式: 将 rs.message 从 UTF-8 转成 Unicode 输出宽字符，或者转成 GBK 输出。
+    // wstring2String(string2Wstring(rs.message, CP_UTF8), CP_ACP)
     cout << "setUserPassword return ResultStruct{" << rs.code << ", " << rs.message << "}" << endl;
 
     try {

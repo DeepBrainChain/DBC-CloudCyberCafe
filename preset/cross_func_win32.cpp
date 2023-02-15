@@ -77,6 +77,8 @@ std::string getErrorMessage(unsigned long error) {
   std::wstring msg = getFormatMessage(error);
   if (msg.empty())
     msg = L"Error message id " + std::to_wstring(error);
+  printf("error code: %lu, error message: %s\n",
+    error, wstring2String(msg, CP_ACP).c_str());
   return unicodeToUtf8(msg);
 }
 
