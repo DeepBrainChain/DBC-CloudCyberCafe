@@ -6,6 +6,7 @@ import pandas as pd
 import os
 import re
 import json
+import argparse
 
 import global_config
 import lvm2
@@ -19,6 +20,17 @@ from threading import Thread
 
 from smyoo import Smyoo
 from error_code import ErrorCode
+
+import version as occv
+
+parser = argparse.ArgumentParser(description=occv.__project_name__)
+parser.add_argument('--tport', type=int, help='port for thrift server, default 9090',
+    default=9090, choices=range(1,65536),metavar='{0...65535}')
+parser.add_argument('--dport', type=int, help='port for plotly dashboard, default 8050',
+    default=8050, choices=range(1,65536),metavar='{0...65535}')
+parser.add_argument('-d', '--debug', action='store_true', help='run plotly dashboard in debug mode')
+parser.add_argument('-v', '--version', action='store_true', help='show the version and exit')
+args = parser.parse_args()
 
 global_config._init()
 smyoo = Smyoo()
@@ -69,7 +81,7 @@ tab_selected_style = {
 
 app.layout = html.Div([
     html.H1(
-        children='DBC Cloud Cybercafe',
+        children=occv.__project_name__,
         style={
             'textAlign': 'center'
         }
@@ -1260,8 +1272,13 @@ def edit_smyoo_setting(phone, password):
     return ''
 
 if __name__ == '__main__':
-    tt = Thread(target=rpc_handler.thrift_thread)
-    tt.start()
-    # app.run_server(debug=True)
-    app.run_server(debug=False, host='0.0.0.0')
-    print("done!")
+    if args.version:
+        print(occv.__version__)
+    else:
+        tt = Thread(target=rpc_handler.thrift_thread, args=(args.tport,))
+        tt.start()
+        if args.debug:
+            app.run_server(debug=True, host='0.0.0.0', port=args.dport)
+        else:
+            app.run_server(debug=False, host='0.0.0.0', port=args.dport)
+        print("done!")

@@ -1,3 +1,4 @@
+import argparse
 import sys
 sys.path.append('../preset/gen-py')
 
@@ -12,15 +13,20 @@ from thrift.protocol import TBinaryProtocol
 # from thrift.transport.TTransport import TMemoryBuffer
 from thrift.TSerialization import serialize, deserialize
 
+parser = argparse.ArgumentParser(description='script to test Cloud Cybercafe')
+parser.add_argument('-s','--server',default='127.0.0.1',help='host ip of thrift server, default 127.0.0.1')
+parser.add_argument('-p','--port',default=9090,help='port of thrift server, default 9090',type=int)
+args = parser.parse_args()
+
 def thriftToString(ts):
     return serialize(ts).decode('utf-8')
 
 def stringToThrift(str, ts):
     return deserialize(ts, str.encode('utf-8'))
 
-def main():
+def main(host, port):
     # Make socket
-    transport = TSocket.TSocket('127.0.0.1', 9090)
+    transport = TSocket.TSocket(host, port)
     # transport = TSocket.TSocket('192.168.118.1', 9090)
 
     # Buffering is critical. Raw sockets are very slow
@@ -119,6 +125,6 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        main(args.server, args.port)
     except Thrift.TException as tx:
         print(f'exception: {tx.message}')

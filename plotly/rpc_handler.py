@@ -158,11 +158,11 @@ class OccHandler:
         ret.message = 'unknown host'
     return ret
 
-def thrift_thread():
+def thrift_thread(tport):
   # run thrift api server
   handler = OccHandler()
   processor = Preset.Processor(handler)
-  transport = TSocket.TServerSocket(host='0.0.0.0',port=9090)
+  transport = TSocket.TServerSocket(host='0.0.0.0',port=tport)
   tfactory = TTransport.TBufferedTransportFactory()
   pfactory = TBinaryProtocol.TBinaryProtocolFactory()
   # tServer = TServer.TThreadedServer(processor, transport, tfactory, pfactory)
