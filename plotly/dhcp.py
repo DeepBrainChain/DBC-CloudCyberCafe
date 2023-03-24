@@ -134,8 +134,8 @@ def edit_dhcp_conf_subnet(network_name, network_interface, subnet, subnet_mask,
     file.write(f'interface={network_interface}\n')
     for line in bindings:
       file.write(f'{line}')
-    # file.write(f'dhcp-range={range_from},{range_to},{subnet_mask},45m\n')
-    file.write(f'dhcp-range={range_from},proxy,{subnet_mask},45m\n')
+    file.write(f'dhcp-range={range_from},{range_to},{subnet_mask},45m\n')
+    # file.write(f'dhcp-range={range_from},proxy,{subnet_mask},45m\n')
   return 0, f'edit {network_name}.conf successful'
 
 def bind_mac_address_and_ip_address(network_name, hostname, mac_addr, ip_addr):

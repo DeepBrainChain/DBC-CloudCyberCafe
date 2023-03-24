@@ -1,0 +1,34 @@
+# EditorConfig helps developers define and maintain consistent
+# EditorConfig帮助开发人员定义和维护一致性
+# coding styles between different editors and IDEs
+# 不同编辑器和ide之间的编码样式
+# 打开需要格式化的文件并手动格式化代码（Mac OS ：shift+option+f  Windows ：shift+alt+f）
+
+# editorconfig.org
+
+# root<boolean> : 是否是顶级配置文件，设置为true的时候才会停止搜索.editorconfig文件，代表这是项目的根目录
+root = true
+
+#表示所有文件都使用下面的规则
+[*]
+
+# charset<"latin" | "utf-8" | "utf-8-bom" | "utf-16be" | "utf-16le"> : 文件编码格式
+charset = utf-8
+
+# indent_style<"tab" | "space"> ： 缩进方式
+indent_style = space
+
+# indent_size<number>  ： 缩进大小
+indent_size = 2
+
+# end_of_line<"lf" | "cr" | "crlf"> ： 换行符类型
+end_of_line = lf
+
+# insert_final_newline<boolean> ： 是否让文件以空行结束
+insert_final_newline = true
+
+# trim_trailing_whitespace<boolean> ： 是否删除行尾空格
+trim_trailing_whitespace = true
+
+# max_line_length<number> ： 最大行宽
+max_line_length = 80

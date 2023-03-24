@@ -209,7 +209,7 @@ def restore_after_restart():
   try:
     root = rtslib.RTSRoot()
     # root.restore_from_file()
-    root.restore_from_file(restore_file='/etc/rtslib-fb-targets/saveconfig.json')
+    root.restore_from_file(restore_file='/etc/rtslib-fb-target/saveconfig.json')
     # root.restore_from_file(restore_file='/etc/target/saveconfig.json')
   except:
     return 1, 'Error occurred, please contact the developer'

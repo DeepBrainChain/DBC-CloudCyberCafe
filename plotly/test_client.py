@@ -83,12 +83,12 @@ def main(host, port):
         print(f'getBootMenuMsg return ResultStruct{{{rs.code}, {rs.message}}}')
 
     # bm = BootMenu(menu='wintest',superTube=True)
-    bm = BootMenu(menu='ubuntu1804',superTube=False)
+    bm = BootMenu(menu='ubuntu1804',superTube=True)
     setBootMenuMsg = Message(
         version=0x01000001,
         type=MessageType.SET_BOOT_MENU,
         body=thriftToString(bm),
-        host='192.168.1.101')
+        host='asus')
     rs = client.handleMessage(setBootMenuMsg)
     print(f'setBootMenuMsg return ResultStruct{{{rs.code}, {rs.message}}}')
 

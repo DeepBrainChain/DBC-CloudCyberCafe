@@ -12,10 +12,9 @@ from thrift.protocol import TBinaryProtocol
 from thrift.TSerialization import serialize, deserialize
 from thrift.server import TServer, TNonblockingServer
 
-import time
-
 import global_config
 from error_code import ErrorCode
+import occ
 
 def thriftToString(ts):
   return serialize(ts).decode('utf-8')
@@ -70,8 +69,8 @@ class OccHandler:
       ret.message = 'pong'
       print('handle ping message')
     elif msg.type == MessageType.GET_BOOT_MENU:
-      boot_menu = global_config.get_value('boot_menu')
-      bml = BootMenuList(menus=list(boot_menu['name']))
+      df_boot_menu = global_config.get_boot_menu_dataframe()
+      bml = BootMenuList(menus=df_boot_menu['name'].tolist())
       ret.code = 0
       ret.message = thriftToString(bml)
       # ret.message = 'success'
@@ -80,33 +79,21 @@ class OccHandler:
       bm = BootMenu()
       bm = stringToThrift(msg.body, bm)
       print(f'setBootmenu: {bm}')
-      request = {
-        'type':'SET_BOOT_MENU',
-        'host':msg.host,
-        'menu':bm.menu,
-        'superTube':bm.superTube
-      }
-      global_config.set_cache('request',repr(request), expire=3)
-      time.sleep(1)
-      resultcache = global_config.get_cache('result', default="")
-      for sec in range(3):
-        if len(resultcache) > 0:
-          break;
-        time.sleep(1)
-        resultcache = global_config.get_cache('result', default="")
-      if len(resultcache) > 0:
-        global_config.delete_cache('result')
-        response = eval(resultcache)
-        ret.code = response['code']
-        ret.message = response['message']
+      if msg.host is None:
+        ret.code = ErrorCode.UNKNOWN_HOST.value
+        ret.message = 'unknown host'
       else:
-        ret.code = ErrorCode.TIMEOUT.value
-        ret.message = 'timeout error'
+        result_code, result_message = occ.rpc_set_boot_menu(
+          msg.host, bm.menu, bm.superTube)
+        ret.code = result_code
+        ret.message = result_message
       print('handle set boot menu message')
     elif msg.type == MessageType.GET_SMYOO_DEVICE_INFO:
-      hostname = global_config.find_host_name(hostname=msg.host,ip=msg.host)
-      if hostname:
-        device = global_config.get_smyoo_device_info(hostname)
+      if msg.host is None:
+        ret.code = ErrorCode.UNKNOWN_HOST.value
+        ret.message = 'unknown host'
+      else:
+        device = occ.get_smyoo_device_info(msg.host, updatedevices=True)
         if device:
           # print(f'get smyoo device info: {device}')
           info = SmyooDeviceInfo(mcuname=device['mcuname'],
@@ -117,45 +104,41 @@ class OccHandler:
         else:
           ret.code = ErrorCode.SMYOO_HOST_NOT_EXISTED.value
           ret.message= 'smyoo device not existed'
-      else:
-        ret.code = ErrorCode.UNKNOWN_HOST.value
-        ret.message = 'can not find smyoo mcuname of host'
       print('handle get smyoo device info message')
     elif msg.type == MessageType.SET_SMYOO_DEVICE_POWER:
       sdp = SmyooDevicePowerData()
       sdp = stringToThrift(msg.body, sdp)
       print(f'setSmyooDevicePower: {sdp}')
-      request = {
-        'type':'SET_SMYOO_DEVICE_POWER',
-        'host':msg.host,
-        'status':sdp.status,
-        'mcuid':sdp.mcuid,
-        'mcuname':sdp.mcuname
-      }
-      global_config.set_cache('request',repr(request), expire=3)
-      time.sleep(1)
-      resultcache = global_config.get_cache('result', default="")
-      for sec in range(3):
-        if len(resultcache) > 0:
-          break;
-        time.sleep(1)
-        resultcache = global_config.get_cache('result', default="")
-      if len(resultcache) > 0:
-        global_config.delete_cache('result')
-        response = eval(resultcache)
-        ret.code = response['code']
-        ret.message = response['message']
-      else:
-        ret.code = ErrorCode.TIMEOUT.value
-        ret.message = 'timeout error'
-      print('handle set smyoo device power message')
-    else:
-      hostip = global_config.find_host_ip(hostname=msg.host,ip=msg.host)
-      if hostip:
-        ret = self.sendMsg(msg, hostip)
-      else:
+      if msg.host is None:
         ret.code = ErrorCode.UNKNOWN_HOST.value
         ret.message = 'unknown host'
+      else:
+        if sdp.status == 1:
+          result_code, result_message = occ.host_power_on_item(hostname=msg.host)
+          ret.code = result_code
+          ret.message = result_message
+        elif sdp.status == 0:
+          result_code, result_message = occ.host_power_off_item(hostname=msg.host)
+          ret.code = result_code
+          ret.message = result_message
+        else:
+          ret.code = ErrorCode.PLOTLY_INVALID_SMYOO_POWER_STATUS.value
+          ret.message = 'invalid power status'
+      print('handle set smyoo device power message')
+    else:
+      if msg.host is None:
+        ret.code = ErrorCode.UNKNOWN_HOST.value
+        ret.message = 'unknown host'
+      else:
+        df_hosts = global_config.get_hosts_dataframe()
+        host_name_list = df_hosts['host_name'].tolist()
+        if msg.host in host_name_list:
+          index_num = host_name_list.index(msg.host)
+          ret = self.sendMsg(msg, df_hosts.iloc[index_num]['ip'])
+        else:
+          ret.code = ErrorCode.UNKNOWN_HOST.value
+          ret.message= 'can not find host in dashboard'
+      print(f'handle message type {msg.type}')
     return ret
 
 def thrift_thread(tport):
